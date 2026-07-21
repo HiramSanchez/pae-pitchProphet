@@ -9,6 +9,13 @@ class PredictedResult(StrEnum):
 
 
 @dataclass(frozen=True)
+class TeamRating:
+    team_id: int
+    name: str
+    elo: float
+
+
+@dataclass(frozen=True)
 class PredictionInput:
     home_team_id: int
     away_team_id: int

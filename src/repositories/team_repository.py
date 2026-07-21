@@ -1,4 +1,5 @@
 import sqlite3
+from src.models.prediction import TeamRating
 from dataclasses import dataclass
 
 
@@ -26,6 +27,31 @@ class TeamStatistics:
 class TeamRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
+        
+    def find_rating_by_id(
+        self,
+        team_id: int,
+    ) -> TeamRating | None:
+        row = self.connection.execute(
+            """
+            SELECT
+                id,
+                name,
+                current_elo
+            FROM teams
+            WHERE id = ?
+            """,
+            (team_id,),
+        ).fetchone()
+
+        if row is None:
+            return None
+
+        return TeamRating(
+            team_id=int(row["id"]),
+            name=str(row["name"]),
+            elo=float(row["current_elo"]),
+        )
 
     def reset_statistics(self) -> None:
         self.connection.execute(
