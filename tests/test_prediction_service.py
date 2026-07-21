@@ -4,6 +4,7 @@ import pytest
 
 from src.models.prediction import (
     PredictedResult,
+    Prediction,
     PredictionInput,
     TeamRating,
 )
@@ -11,6 +12,33 @@ from src.services.prediction_service import (
     PredictionService,
     TeamNotFoundError,
 )
+
+
+class StubPredictionModel:
+    name = "stub"
+    version = "1.0.0"
+
+    def __init__(self) -> None:
+        self.received_teams: tuple[
+            TeamRating,
+            TeamRating,
+        ] | None = None
+
+    def predict(
+        self,
+        home_team: TeamRating,
+        away_team: TeamRating,
+    ) -> Prediction:
+        self.received_teams = (home_team, away_team)
+
+        return Prediction(
+            home_team_id=home_team.team_id,
+            away_team_id=away_team.team_id,
+            home_probability=0.2,
+            draw_probability=0.3,
+            away_probability=0.5,
+            predicted_result=PredictedResult.AWAY,
+        )
 
 
 def create_test_database() -> sqlite3.Connection:
@@ -186,5 +214,37 @@ def test_probabilities_are_valid() -> None:
     assert 0 <= prediction.home_probability <= 1
     assert 0 <= prediction.draw_probability <= 1
     assert 0 <= prediction.away_probability <= 1
+
+    connection.close()
+
+
+def test_service_delegates_prediction_to_injected_model() -> None:
+    connection = create_test_database()
+    model = StubPredictionModel()
+    service = PredictionService(
+        connection,
+        model=model,
+    )
+
+    prediction = service.predict(
+        PredictionInput(
+            home_team_id=1,
+            away_team_id=2,
+        )
+    )
+
+    assert model.received_teams == (
+        TeamRating(
+            team_id=1,
+            name="Local",
+            elo=1500.0,
+        ),
+        TeamRating(
+            team_id=2,
+            name="Visitante",
+            elo=1500.0,
+        ),
+    )
+    assert prediction.predicted_result == PredictedResult.AWAY
 
     connection.close()

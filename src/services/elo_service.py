@@ -1,7 +1,11 @@
 from dataclasses import dataclass
-from math import pow
 
 from src.config import ELO_K_FACTOR, HOME_ADVANTAGE_ELO
+from src.models.elo import expected_score
+
+
+# Transitional re-export kept for compatibility with existing imports.
+# New code should import expected_score from src.models.elo.
 
 
 @dataclass(frozen=True)
@@ -12,13 +16,6 @@ class EloUpdate:
     away_elo_after: float
     home_change: float
     away_change: float
-
-
-def expected_score(
-    rating_a: float,
-    rating_b: float,
-) -> float:
-    return 1.0 / (1.0 + pow(10.0, (rating_b - rating_a) / 400.0))
 
 
 def actual_score(home_goals: int, away_goals: int) -> float:
