@@ -1,6 +1,6 @@
 import pytest
 
-from src.elo import actual_score, expected_score, update_elo
+from src.services.elo_service import actual_score, expected_score, update_elo
 
 
 def test_equal_ratings_have_equal_expectation() -> None:
