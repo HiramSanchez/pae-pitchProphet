@@ -23,3 +23,16 @@ class MatchPrediction:
     away_team_name: str
     prediction: Prediction
     explanation: dict[str, object] | None = None
+
+
+@dataclass(frozen=True)
+class CompletedMatch:
+    match_id: int
+    tournament_id: int
+    round_number: int
+    home_team_id: int
+    home_team_name: str
+    away_team_id: int
+    away_team_name: str
+    home_goals: int
+    away_goals: int

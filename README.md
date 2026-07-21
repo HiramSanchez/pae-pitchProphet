@@ -44,6 +44,7 @@ python -m pip install -r requirements.txt
 ```bash
 python -m scripts.initialize_database
 python -m scripts.migrate_prediction_persistence
+python -m scripts.migrate_evaluation_persistence
 python -m scripts.seed_jornada_1
 python -m scripts.process_results
 python -m scripts.migrate_team_statistics
@@ -53,6 +54,13 @@ python -m scripts.recalculate_statistics
 4. Run the application:
 ```bash
 python main.py
+```
+
+Run temporal model evaluation:
+
+```bash
+python -m scripts.backtest_models 1
+python -m scripts.evaluate_models 1
 ```
 
 5. Run the tests:

@@ -1,5 +1,6 @@
 from src.database import database_connection
 from src.database.migrations import (
+    migrate_evaluation_persistence_schema,
     migrate_prediction_persistence_schema,
 )
 
@@ -141,6 +142,7 @@ def initialize_database() -> None:
     with database_connection() as connection:
         connection.executescript(SCHEMA)
         migrate_prediction_persistence_schema(connection)
+        migrate_evaluation_persistence_schema(connection)
 
     print("Base de datos inicializada correctamente.")
 
