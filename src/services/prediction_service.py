@@ -6,9 +6,11 @@ from src.config import (
     MAX_DRAW_PROBABILITY,
     MIN_DRAW_PROBABILITY,
 )
+from src.models.match import MatchPrediction
 from src.models.prediction import Prediction, PredictionInput, TeamRating
 from src.prediction.base import PredictionModel
 from src.prediction.elo_model import EloPredictionModel
+from src.repositories.match_repository import MatchRepository
 from src.repositories.team_repository import TeamRepository
 
 
@@ -27,6 +29,7 @@ class PredictionService:
         *,
         model: PredictionModel | None = None,
     ) -> None:
+        self.match_repository = MatchRepository(connection)
         self.team_repository = TeamRepository(connection)
         self.model = (
             model
@@ -64,6 +67,40 @@ class PredictionService:
             home_team=home_team,
             away_team=away_team,
         )
+
+    def predict_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[MatchPrediction]:
+        scheduled_matches = (
+            self.match_repository.find_scheduled_by_round(
+                tournament_id=tournament_id,
+                round_number=round_number,
+            )
+        )
+
+        predictions: list[MatchPrediction] = []
+
+        for match in scheduled_matches:
+            prediction = self.predict(
+                PredictionInput(
+                    home_team_id=match.home_team_id,
+                    away_team_id=match.away_team_id,
+                )
+            )
+            predictions.append(
+                MatchPrediction(
+                    match_id=match.match_id,
+                    tournament_id=match.tournament_id,
+                    round_number=match.round_number,
+                    home_team_name=match.home_team_name,
+                    away_team_name=match.away_team_name,
+                    prediction=prediction,
+                )
+            )
+
+        return predictions
 
     def _get_team(self, team_id: int) -> TeamRating:
         team = self.team_repository.find_rating_by_id(team_id)
