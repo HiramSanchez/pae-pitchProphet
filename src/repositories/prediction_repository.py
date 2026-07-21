@@ -24,6 +24,11 @@ class PredictionRepository:
         self,
         versioned_prediction: VersionedPrediction,
     ) -> VersionedPrediction:
+        if versioned_prediction.explanation is None:
+            raise ValueError(
+                "A persisted prediction requires an explanation"
+            )
+
         if self.exists(
             match_id=versioned_prediction.match_id,
             model_name=versioned_prediction.model_name,
@@ -162,6 +167,42 @@ class PredictionRepository:
             (tournament_id, round_number),
         ).fetchall()
         return [self._from_row(row) for row in rows]
+
+    def update_explanation(
+        self,
+        versioned_prediction: VersionedPrediction,
+        explanation: dict[str, object],
+    ) -> VersionedPrediction:
+        cursor = self.connection.execute(
+            """
+            UPDATE predictions
+            SET explanation_json = ?
+            WHERE match_id = ?
+              AND model_name = ?
+              AND model_version = ?
+            """,
+            (
+                self._serialize(explanation),
+                versioned_prediction.match_id,
+                versioned_prediction.model_name,
+                versioned_prediction.model_version,
+            ),
+        )
+
+        if cursor.rowcount != 1:
+            raise ValueError("Prediction to explain was not found")
+
+        return VersionedPrediction(
+            prediction_id=versioned_prediction.prediction_id,
+            match_id=versioned_prediction.match_id,
+            model_name=versioned_prediction.model_name,
+            model_version=versioned_prediction.model_version,
+            configuration=versioned_prediction.configuration,
+            prediction=versioned_prediction.prediction,
+            input_snapshot=versioned_prediction.input_snapshot,
+            created_at=versioned_prediction.created_at,
+            explanation=explanation,
+        )
 
     def _register_model_version(
         self,

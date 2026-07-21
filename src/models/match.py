@@ -22,3 +22,4 @@ class MatchPrediction:
     home_team_name: str
     away_team_name: str
     prediction: Prediction
+    explanation: dict[str, object] | None = None

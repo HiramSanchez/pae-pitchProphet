@@ -132,6 +132,7 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
             p.model_version,
             p.confidence,
             p.input_snapshot_json,
+            p.explanation_json,
             mv.configuration_json
         FROM predictions p
         INNER JOIN model_versions mv
@@ -141,6 +142,7 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
     ).fetchone()
     snapshot = json.loads(row["input_snapshot_json"])
     configuration = json.loads(row["configuration_json"])
+    explanation = json.loads(row["explanation_json"])
 
     assert row["model_name"] == "elo"
     assert row["model_version"] == "1.0.0"
@@ -155,6 +157,31 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
     }
     assert snapshot["model_configuration"] == configuration
     assert snapshot["generated_at"]
+    assert explanation["main_factors"]
+    assert explanation["uncertainty"] in {
+        "low",
+        "medium",
+        "high",
+    }
+
+    connection.close()
+
+
+def test_predict_round_backfills_missing_explanation() -> None:
+    connection = create_test_database()
+    service = PredictionService(connection)
+    service.predict_round(1, 2)
+    connection.execute(
+        "UPDATE predictions SET explanation_json = NULL"
+    )
+
+    predictions = service.predict_round(1, 2)
+
+    stored_explanation = connection.execute(
+        "SELECT explanation_json FROM predictions"
+    ).fetchone()[0]
+    assert stored_explanation is not None
+    assert predictions[0].explanation is not None
 
     connection.close()
 
@@ -166,3 +193,18 @@ def test_display_predictions_explains_empty_round(
 
     output = capsys.readouterr().out
     assert "No hay partidos programados" in output
+
+
+def test_display_predictions_includes_spanish_explanation(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    connection = create_test_database()
+    predictions = PredictionService(connection).predict_round(1, 2)
+
+    display_predictions(predictions)
+
+    output = capsys.readouterr().out
+    assert "Incertidumbre" in output
+    assert "Resultado alternativo" in output
+
+    connection.close()

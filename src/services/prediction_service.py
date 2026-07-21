@@ -1,4 +1,5 @@
 import sqlite3
+from dataclasses import replace
 from datetime import datetime, timezone
 
 from src.config import (
@@ -22,6 +23,7 @@ from src.repositories.prediction_repository import (
     PredictionRepository,
 )
 from src.repositories.team_repository import TeamRepository
+from src.services.explanation_service import ExplanationService
 
 
 class TeamNotFoundError(ValueError):
@@ -42,6 +44,7 @@ class PredictionService:
         self.match_repository = MatchRepository(connection)
         self.prediction_repository = PredictionRepository(connection)
         self.team_repository = TeamRepository(connection)
+        self.explanation_service = ExplanationService()
         self.model = (
             model
             if model is not None
@@ -108,7 +111,17 @@ class PredictionService:
                         "Stored configuration differs for "
                         f"{self.model.name} {self.model.version}"
                     )
-                prediction = existing.prediction
+                if existing.explanation is None:
+                    explanation = self.explanation_service.generate(
+                        existing
+                    )
+                    existing = (
+                        self.prediction_repository.update_explanation(
+                            existing,
+                            explanation,
+                        )
+                    )
+                versioned_prediction = existing
             else:
                 home_team = self._get_team(match.home_team_id)
                 away_team = self._get_team(match.away_team_id)
@@ -117,31 +130,39 @@ class PredictionService:
                     away_team=away_team,
                 )
                 generated_at = datetime.now(timezone.utc).isoformat()
-                self.prediction_repository.save(
-                    VersionedPrediction(
-                        match_id=match.match_id,
-                        model_name=self.model.name,
-                        model_version=self.model.version,
-                        configuration=self.model.configuration,
-                        prediction=prediction,
-                        input_snapshot={
-                            "home_team": {
-                                "team_id": home_team.team_id,
-                                "elo": home_team.elo,
-                            },
-                            "away_team": {
-                                "team_id": away_team.team_id,
-                                "elo": away_team.elo,
-                            },
-                            "model_configuration": (
-                                self.model.configuration
-                            ),
-                            "generated_at": generated_at,
+                versioned_prediction = VersionedPrediction(
+                    match_id=match.match_id,
+                    model_name=self.model.name,
+                    model_version=self.model.version,
+                    configuration=self.model.configuration,
+                    prediction=prediction,
+                    input_snapshot={
+                        "home_team": {
+                            "team_id": home_team.team_id,
+                            "elo": home_team.elo,
                         },
-                        created_at=generated_at,
-                    )
+                        "away_team": {
+                            "team_id": away_team.team_id,
+                            "elo": away_team.elo,
+                        },
+                        "model_configuration": (
+                            self.model.configuration
+                        ),
+                        "generated_at": generated_at,
+                    },
+                    created_at=generated_at,
+                )
+                versioned_prediction = replace(
+                    versioned_prediction,
+                    explanation=self.explanation_service.generate(
+                        versioned_prediction
+                    ),
+                )
+                versioned_prediction = self.prediction_repository.save(
+                    versioned_prediction
                 )
 
+            prediction = versioned_prediction.prediction
             predictions.append(
                 MatchPrediction(
                     match_id=match.match_id,
@@ -150,6 +171,7 @@ class PredictionService:
                     home_team_name=match.home_team_name,
                     away_team_name=match.away_team_name,
                     prediction=prediction,
+                    explanation=versioned_prediction.explanation,
                 )
             )
 

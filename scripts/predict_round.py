@@ -2,6 +2,7 @@ import argparse
 
 from src.database import database_connection
 from src.models.match import MatchPrediction
+from src.services.explanation_service import ExplanationService
 from src.services.prediction_service import PredictionService
 
 
@@ -22,6 +23,13 @@ def display_predictions(
             f"empate {prediction.draw_probability:.1%}, "
             f"visitante {prediction.away_probability:.1%})"
         )
+        if match.explanation is not None:
+            print(
+                "  "
+                + ExplanationService.to_spanish(
+                    match.explanation
+                )
+            )
 
 
 def main() -> None:

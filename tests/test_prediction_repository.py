@@ -66,6 +66,11 @@ def versioned_prediction(
             "generated_at": "2026-07-21T12:00:00+00:00",
         },
         created_at="2026-07-21T12:00:00+00:00",
+        explanation={
+            "main_factors": [],
+            "uncertainty": "low",
+            "alternative_result": "draw",
+        },
     )
 
 
@@ -104,6 +109,26 @@ def test_save_rejects_duplicate_prediction() -> None:
     connection.close()
 
 
+def test_save_requires_explanation() -> None:
+    connection = create_test_database()
+    repository = PredictionRepository(connection)
+    prediction = versioned_prediction()
+    prediction_without_explanation = VersionedPrediction(
+        match_id=prediction.match_id,
+        model_name=prediction.model_name,
+        model_version=prediction.model_version,
+        configuration=prediction.configuration,
+        prediction=prediction.prediction,
+        input_snapshot=prediction.input_snapshot,
+        created_at=prediction.created_at,
+    )
+
+    with pytest.raises(ValueError, match="requires an explanation"):
+        repository.save(prediction_without_explanation)
+
+    connection.close()
+
+
 def test_save_rejects_configuration_change_for_same_version() -> None:
     connection = create_test_database()
     repository = PredictionRepository(connection)
@@ -129,5 +154,33 @@ def test_find_by_round_filters_tournament_and_round() -> None:
 
     assert predictions == [expected]
     assert repository.find_by_round(1, 99) == []
+
+    connection.close()
+
+
+def test_update_explanation_preserves_prediction_data() -> None:
+    connection = create_test_database()
+    repository = PredictionRepository(connection)
+    saved = repository.save(versioned_prediction())
+    explanation = {
+        "main_factors": [],
+        "uncertainty": "low",
+        "alternative_result": "draw",
+    }
+
+    updated = repository.update_explanation(
+        saved,
+        explanation,
+    )
+    recovered = repository.find_by_match_and_model(
+        1,
+        "elo",
+        "1.0.0",
+    )
+
+    assert updated.explanation == explanation
+    assert recovered == updated
+    assert updated.prediction == saved.prediction
+    assert updated.input_snapshot == saved.input_snapshot
 
     connection.close()
