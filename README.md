@@ -43,6 +43,7 @@ python -m pip install -r requirements.txt
 3. Initialize the local database:
 ```bash
 python -m scripts.initialize_database
+python -m scripts.migrate_prediction_persistence
 python -m scripts.seed_jornada_1
 python -m scripts.process_results
 python -m scripts.migrate_team_statistics

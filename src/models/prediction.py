@@ -1,4 +1,4 @@
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import StrEnum
 
 
@@ -48,4 +48,27 @@ class Prediction:
             self.home_probability
             + self.draw_probability
             + self.away_probability
+        )
+
+
+@dataclass(frozen=True)
+class VersionedPrediction:
+    match_id: int
+    model_name: str
+    model_version: str
+    configuration: dict[str, float]
+    prediction: Prediction
+    input_snapshot: dict[str, object]
+    created_at: str
+    prediction_id: int | None = None
+    explanation: dict[str, object] | None = field(
+        default=None
+    )
+
+    @property
+    def confidence(self) -> float:
+        return max(
+            self.prediction.home_probability,
+            self.prediction.draw_probability,
+            self.prediction.away_probability,
         )

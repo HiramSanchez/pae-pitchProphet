@@ -56,6 +56,15 @@ class EloPredictionModel:
         self.min_draw_probability = min_draw_probability
         self.draw_decay_scale = draw_decay_scale
 
+    @property
+    def configuration(self) -> dict[str, float]:
+        return {
+            "home_advantage": self.home_advantage,
+            "max_draw_probability": self.max_draw_probability,
+            "min_draw_probability": self.min_draw_probability,
+            "draw_decay_scale": self.draw_decay_scale,
+        }
+
     def predict(
         self,
         home_team: TeamRating,

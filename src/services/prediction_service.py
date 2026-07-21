@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timezone
 
 from src.config import (
     DRAW_DECAY_SCALE,
@@ -7,10 +8,19 @@ from src.config import (
     MIN_DRAW_PROBABILITY,
 )
 from src.models.match import MatchPrediction
-from src.models.prediction import Prediction, PredictionInput, TeamRating
+from src.models.prediction import (
+    Prediction,
+    PredictionInput,
+    TeamRating,
+    VersionedPrediction,
+)
 from src.prediction.base import PredictionModel
 from src.prediction.elo_model import EloPredictionModel
 from src.repositories.match_repository import MatchRepository
+from src.repositories.prediction_repository import (
+    ModelConfigurationMismatchError,
+    PredictionRepository,
+)
 from src.repositories.team_repository import TeamRepository
 
 
@@ -30,6 +40,7 @@ class PredictionService:
         model: PredictionModel | None = None,
     ) -> None:
         self.match_repository = MatchRepository(connection)
+        self.prediction_repository = PredictionRepository(connection)
         self.team_repository = TeamRepository(connection)
         self.model = (
             model
@@ -83,12 +94,54 @@ class PredictionService:
         predictions: list[MatchPrediction] = []
 
         for match in scheduled_matches:
-            prediction = self.predict(
-                PredictionInput(
-                    home_team_id=match.home_team_id,
-                    away_team_id=match.away_team_id,
+            existing = (
+                self.prediction_repository.find_by_match_and_model(
+                    match_id=match.match_id,
+                    model_name=self.model.name,
+                    model_version=self.model.version,
                 )
             )
+
+            if existing is not None:
+                if existing.configuration != self.model.configuration:
+                    raise ModelConfigurationMismatchError(
+                        "Stored configuration differs for "
+                        f"{self.model.name} {self.model.version}"
+                    )
+                prediction = existing.prediction
+            else:
+                home_team = self._get_team(match.home_team_id)
+                away_team = self._get_team(match.away_team_id)
+                prediction = self.predict_from_ratings(
+                    home_team=home_team,
+                    away_team=away_team,
+                )
+                generated_at = datetime.now(timezone.utc).isoformat()
+                self.prediction_repository.save(
+                    VersionedPrediction(
+                        match_id=match.match_id,
+                        model_name=self.model.name,
+                        model_version=self.model.version,
+                        configuration=self.model.configuration,
+                        prediction=prediction,
+                        input_snapshot={
+                            "home_team": {
+                                "team_id": home_team.team_id,
+                                "elo": home_team.elo,
+                            },
+                            "away_team": {
+                                "team_id": away_team.team_id,
+                                "elo": away_team.elo,
+                            },
+                            "model_configuration": (
+                                self.model.configuration
+                            ),
+                            "generated_at": generated_at,
+                        },
+                        created_at=generated_at,
+                    )
+                )
+
             predictions.append(
                 MatchPrediction(
                     match_id=match.match_id,

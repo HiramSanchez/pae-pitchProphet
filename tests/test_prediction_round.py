@@ -1,8 +1,12 @@
+import json
 import sqlite3
 
 import pytest
 
 from scripts.predict_round import display_predictions
+from src.database.migrations import (
+    migrate_prediction_persistence_schema,
+)
 from src.models.prediction import PredictedResult
 from src.services.prediction_service import PredictionService
 
@@ -54,6 +58,7 @@ def create_test_database() -> sqlite3.Connection:
             (5, 2, 2, 3, 2, NULL, NULL, 'scheduled');
         """
     )
+    migrate_prediction_persistence_schema(connection)
 
     return connection
 
@@ -93,6 +98,63 @@ def test_predict_round_returns_empty_list_for_empty_round() -> None:
     )
 
     assert predictions == []
+
+    connection.close()
+
+
+def test_predict_round_reuses_existing_versioned_prediction() -> None:
+    connection = create_test_database()
+    service = PredictionService(connection)
+
+    first_result = service.predict_round(1, 2)
+    second_result = service.predict_round(1, 2)
+
+    stored_count = connection.execute(
+        "SELECT COUNT(1) FROM predictions"
+    ).fetchone()[0]
+
+    assert stored_count == 1
+    assert second_result == first_result
+
+    connection.close()
+
+
+def test_predict_round_stores_reproducible_snapshot() -> None:
+    connection = create_test_database()
+    service = PredictionService(connection)
+
+    service.predict_round(1, 2)
+
+    row = connection.execute(
+        """
+        SELECT
+            p.model_name,
+            p.model_version,
+            p.confidence,
+            p.input_snapshot_json,
+            mv.configuration_json
+        FROM predictions p
+        INNER JOIN model_versions mv
+            ON mv.model_name = p.model_name
+           AND mv.model_version = p.model_version
+        """
+    ).fetchone()
+    snapshot = json.loads(row["input_snapshot_json"])
+    configuration = json.loads(row["configuration_json"])
+
+    assert row["model_name"] == "elo"
+    assert row["model_version"] == "1.0.0"
+    assert row["confidence"] > 0
+    assert snapshot["home_team"] == {
+        "team_id": 1,
+        "elo": 1500.0,
+    }
+    assert snapshot["away_team"] == {
+        "team_id": 2,
+        "elo": 1500.0,
+    }
+    assert snapshot["model_configuration"] == configuration
+    assert snapshot["generated_at"]
 
     connection.close()
 

@@ -268,7 +268,7 @@ def insert_prediction(
 
     connection.execute(
         """
-        INSERT INTO predictions (
+        INSERT INTO user_predictions (
             match_id,
             predictor,
             predicted_outcome,

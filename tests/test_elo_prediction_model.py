@@ -20,6 +20,12 @@ def test_model_has_name_and_version() -> None:
 
     assert model.name == "elo"
     assert model.version == "1.0.0"
+    assert model.configuration == {
+        "home_advantage": 80.0,
+        "max_draw_probability": 0.28,
+        "min_draw_probability": 0.12,
+        "draw_decay_scale": 400.0,
+    }
 
 
 def test_probabilities_sum_to_one_and_are_valid() -> None:
