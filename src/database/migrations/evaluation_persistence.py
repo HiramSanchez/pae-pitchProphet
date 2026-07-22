@@ -1,6 +1,22 @@
 import sqlite3
 
 
+EVALUATION_COLUMNS = {
+    "evaluation_key": "TEXT",
+    "from_round": "INTEGER",
+    "to_round": "INTEGER",
+}
+
+
+def _column_names(connection: sqlite3.Connection) -> set[str]:
+    return {
+        str(row[1])
+        for row in connection.execute(
+            "PRAGMA table_info(model_evaluations)"
+        ).fetchall()
+    }
+
+
 def migrate_evaluation_persistence_schema(
     connection: sqlite3.Connection,
 ) -> None:
@@ -34,6 +50,31 @@ def migrate_evaluation_persistence_schema(
             );
 
             COMMIT;
+            """
+        )
+        existing = _column_names(connection)
+        for name, sql_type in EVALUATION_COLUMNS.items():
+            if name not in existing:
+                connection.execute(
+                    f"ALTER TABLE model_evaluations "
+                    f"ADD COLUMN {name} {sql_type}"
+                )
+        connection.executescript(
+            """
+            CREATE UNIQUE INDEX IF NOT EXISTS
+            idx_model_evaluations_key
+            ON model_evaluations(evaluation_key)
+            WHERE evaluation_key IS NOT NULL;
+
+            CREATE INDEX IF NOT EXISTS
+            idx_model_evaluations_latest
+            ON model_evaluations(
+                model_name,
+                model_version,
+                tournament_id,
+                evaluated_at DESC,
+                id DESC
+            );
             """
         )
     except Exception:

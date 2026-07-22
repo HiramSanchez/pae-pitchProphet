@@ -8,7 +8,7 @@ from src.config import (
     MAX_DRAW_PROBABILITY,
     MIN_DRAW_PROBABILITY,
 )
-from src.models.match import MatchPrediction
+from src.models.match import MatchPrediction, ScheduledMatch
 from src.models.prediction import (
     Prediction,
     PredictionInput,
@@ -86,6 +86,8 @@ class PredictionService:
         self,
         tournament_id: int,
         round_number: int,
+        *,
+        refresh_scheduled: bool = False,
     ) -> list[MatchPrediction]:
         scheduled_matches = (
             self.match_repository.find_scheduled_by_round(
@@ -111,6 +113,9 @@ class PredictionService:
                         "Stored configuration differs for "
                         f"{self.model.name} {self.model.version}"
                     )
+                if refresh_scheduled:
+                    refreshed = self._refresh_if_changed(existing, match)
+                    existing = refreshed
                 if existing.explanation is None:
                     explanation = self.explanation_service.generate(
                         existing
@@ -181,6 +186,46 @@ class PredictionService:
             )
 
         return predictions
+
+    def _refresh_if_changed(
+        self,
+        existing: VersionedPrediction,
+        match: ScheduledMatch,
+    ) -> VersionedPrediction:
+        home_team = self._get_team_with_features(
+            match.home_team_id, match.tournament_id, match.round_number
+        )
+        away_team = self._get_team_with_features(
+            match.away_team_id, match.tournament_id, match.round_number
+        )
+        prediction = self.predict_from_ratings(home_team, away_team)
+        comparable = {
+            "home_team": self._team_snapshot(home_team),
+            "away_team": self._team_snapshot(away_team),
+            "model_configuration": self.model.configuration,
+            "model_output": self._model_output(prediction),
+        }
+        if all(
+            existing.input_snapshot.get(key) == value
+            for key, value in comparable.items()
+        ):
+            return existing
+        generated_at = datetime.now(timezone.utc).isoformat()
+        refreshed = VersionedPrediction(
+            prediction_id=existing.prediction_id,
+            match_id=existing.match_id,
+            model_name=existing.model_name,
+            model_version=existing.model_version,
+            configuration=existing.configuration,
+            prediction=prediction,
+            input_snapshot={**comparable, "generated_at": generated_at},
+            created_at=generated_at,
+        )
+        refreshed = replace(
+            refreshed,
+            explanation=self.explanation_service.generate(refreshed),
+        )
+        return self.prediction_repository.update_scheduled(refreshed)
 
     def _get_team(self, team_id: int) -> TeamRating:
         team = self.team_repository.find_rating_by_id(team_id)

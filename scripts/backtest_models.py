@@ -3,11 +3,7 @@ import sqlite3
 
 from src.database import database_connection
 from src.models.evaluation import ModelEvaluation
-from src.prediction.elo_form_model import EloFormPredictionModel
-from src.prediction.elo_model import EloPredictionModel
-from src.prediction.ensemble_model import EnsemblePredictionModel
-from src.prediction.poisson_model import PoissonPredictionModel
-from src.prediction.registry import PredictionModelRegistry
+from src.prediction.default_models import default_model_registry
 from src.services.backtesting_service import BacktestingService
 from src.services.evaluation_service import EvaluationService
 
@@ -16,18 +12,7 @@ def backtest_models(
     connection: sqlite3.Connection,
     tournament_id: int,
 ) -> list[ModelEvaluation]:
-    registry = PredictionModelRegistry(
-        [
-            EloPredictionModel(),
-            EloFormPredictionModel(),
-            PoissonPredictionModel(),
-        ]
-    )
-    component_models = registry.list_active()
-    models = [
-        *component_models,
-        EnsemblePredictionModel(component_models),
-    ]
+    models = default_model_registry().list_active()
     backtesting_service = BacktestingService(connection)
     evaluation_service = EvaluationService()
     evaluations: list[ModelEvaluation] = []

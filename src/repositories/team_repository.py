@@ -2,6 +2,7 @@ import sqlite3
 from dataclasses import dataclass
 
 from src.config import (
+    DEFAULT_ELO,
     POISSON_DEFAULT_AWAY_GOALS,
     POISSON_DEFAULT_HOME_GOALS,
     POISSON_PRIOR_MATCHES,
@@ -250,6 +251,17 @@ class TeamRepository:
                 away_draws = 0,
                 away_losses = 0
             """
+        )
+
+    def reset_ratings(self, initial_elo: float = DEFAULT_ELO) -> None:
+        self.connection.execute(
+            "UPDATE teams SET current_elo = ?", (initial_elo,)
+        )
+
+    def update_rating(self, team_id: int, elo: float) -> None:
+        self.connection.execute(
+            "UPDATE teams SET current_elo = ? WHERE id = ?",
+            (elo, team_id),
         )
 
     def update_statistics(

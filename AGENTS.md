@@ -89,6 +89,15 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   selection belongs in orchestration, not the model.
 - Explanations are deterministic and derived from snapshots, never invented by
   an LLM.
+- Match sources return canonical `ExternalMatch` values and use
+  `match_sources(source_name, external_match_id)` for stable identity.
+- Statistics, current Elo, and `elo_history` are derived state and are rebuilt
+  atomically from completed matches in deterministic chronological order.
+- Model evaluations retain history. Exact evaluation windows are deduplicated
+  by a versioned canonical SHA-256 key; latest lookup uses UTC `evaluated_at`
+  and row id.
+- Update attempts always retain a sanitized `update_runs` audit row while
+  failed functional changes are rolled back.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 

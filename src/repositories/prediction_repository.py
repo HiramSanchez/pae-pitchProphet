@@ -204,6 +204,39 @@ class PredictionRepository:
             explanation=explanation,
         )
 
+    def update_scheduled(
+        self,
+        prediction: VersionedPrediction,
+    ) -> VersionedPrediction:
+        status = self.connection.execute(
+            "SELECT status FROM matches WHERE id = ?",
+            (prediction.match_id,),
+        ).fetchone()
+        if status is None or str(status["status"]) != "scheduled":
+            raise ValueError("Only scheduled predictions can be refreshed")
+        self.connection.execute(
+            """
+            UPDATE predictions SET home_probability = ?, draw_probability = ?,
+                away_probability = ?, predicted_result = ?, confidence = ?,
+                input_snapshot_json = ?, explanation_json = ?, created_at = ?
+            WHERE match_id = ? AND model_name = ? AND model_version = ?
+            """,
+            (
+                prediction.prediction.home_probability,
+                prediction.prediction.draw_probability,
+                prediction.prediction.away_probability,
+                prediction.prediction.predicted_result.value,
+                prediction.confidence,
+                self._serialize(prediction.input_snapshot),
+                self._serialize(prediction.explanation),
+                prediction.created_at,
+                prediction.match_id,
+                prediction.model_name,
+                prediction.model_version,
+            ),
+        )
+        return prediction
+
     def _register_model_version(
         self,
         model_name: str,

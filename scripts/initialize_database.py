@@ -2,6 +2,8 @@ from src.database import database_connection
 from src.database.migrations import (
     migrate_evaluation_persistence_schema,
     migrate_prediction_persistence_schema,
+    migrate_team_statistics_schema,
+    migrate_update_pipeline_schema,
 )
 
 
@@ -141,8 +143,10 @@ ON elo_history(team_id, round_number);
 def initialize_database() -> None:
     with database_connection() as connection:
         connection.executescript(SCHEMA)
+        migrate_team_statistics_schema(connection)
         migrate_prediction_persistence_schema(connection)
         migrate_evaluation_persistence_schema(connection)
+        migrate_update_pipeline_schema(connection)
 
     print("Base de datos inicializada correctamente.")
 

@@ -8,6 +8,10 @@ class EvaluationRepository:
         self.connection = connection
 
     def save(self, evaluation: ModelEvaluation) -> ModelEvaluation:
+        if evaluation.evaluation_key is not None:
+            existing = self.find_by_key(evaluation.evaluation_key)
+            if existing is not None:
+                return existing
         cursor = self.connection.execute(
             """
             INSERT INTO model_evaluations (
@@ -21,8 +25,9 @@ class EvaluationRepository:
                 top_two_accuracy,
                 calibration_error,
                 evaluated_at
+                ,evaluation_key, from_round, to_round
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 evaluation.model_name,
@@ -35,6 +40,9 @@ class EvaluationRepository:
                 evaluation.top_two_accuracy,
                 evaluation.calibration_error,
                 evaluation.evaluated_at,
+                evaluation.evaluation_key,
+                evaluation.from_round,
+                evaluation.to_round,
             ),
         )
         return ModelEvaluation(
@@ -50,7 +58,35 @@ class EvaluationRepository:
             confusion_matrix=evaluation.confusion_matrix,
             evaluated_at=evaluation.evaluated_at,
             evaluation_id=int(cursor.lastrowid),
+            evaluation_key=evaluation.evaluation_key,
+            from_round=evaluation.from_round,
+            to_round=evaluation.to_round,
         )
+
+    def find_by_key(self, evaluation_key: str) -> ModelEvaluation | None:
+        row = self.connection.execute(
+            "SELECT * FROM model_evaluations WHERE evaluation_key = ?",
+            (evaluation_key,),
+        ).fetchone()
+        return self._from_row(row) if row is not None else None
+
+    def find_latest_by_model(
+        self,
+        model_name: str,
+        model_version: str,
+        tournament_id: int,
+    ) -> ModelEvaluation | None:
+        row = self.connection.execute(
+            """
+            SELECT * FROM model_evaluations
+            WHERE model_name = ? AND model_version = ?
+              AND tournament_id = ?
+            ORDER BY evaluated_at DESC, id DESC
+            LIMIT 1
+            """,
+            (model_name, model_version, tournament_id),
+        ).fetchone()
+        return self._from_row(row) if row is not None else None
 
     def find_ranking(
         self,
@@ -105,4 +141,22 @@ class EvaluationRepository:
             calibration_error=float(row["calibration_error"]),
             confusion_matrix={},
             evaluated_at=str(row["evaluated_at"]),
+            evaluation_key=(
+                str(row["evaluation_key"])
+                if "evaluation_key" in row.keys()
+                and row["evaluation_key"] is not None
+                else None
+            ),
+            from_round=(
+                int(row["from_round"])
+                if "from_round" in row.keys()
+                and row["from_round"] is not None
+                else None
+            ),
+            to_round=(
+                int(row["to_round"])
+                if "to_round" in row.keys()
+                and row["to_round"] is not None
+                else None
+            ),
         )

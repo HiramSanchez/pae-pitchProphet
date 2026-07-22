@@ -28,3 +28,6 @@ class ModelEvaluation:
     confusion_matrix: dict[str, dict[str, int]]
     evaluated_at: str
     evaluation_id: int | None = None
+    evaluation_key: str | None = None
+    from_round: int | None = None
+    to_round: int | None = None

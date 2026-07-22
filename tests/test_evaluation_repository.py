@@ -82,3 +82,34 @@ def test_ranking_uses_calibration_as_second_criterion() -> None:
     ]
 
     connection.close()
+
+
+def test_save_by_key_is_idempotent_and_finds_latest_model() -> None:
+    connection = sqlite3.connect(":memory:")
+    connection.row_factory = sqlite3.Row
+    migrate_evaluation_persistence_schema(connection)
+    repository = EvaluationRepository(connection)
+    first = evaluation("elo", 0.7)
+    first = ModelEvaluation(
+        **{**first.__dict__, "evaluation_key": "window-1"}
+    )
+    second = evaluation("elo", 0.5)
+    second = ModelEvaluation(
+        **{
+            **second.__dict__,
+            "evaluation_key": "window-2",
+            "evaluated_at": "2026-07-22T12:00:00+00:00",
+        }
+    )
+
+    saved_first = repository.save(first)
+    duplicate = repository.save(first)
+    saved_second = repository.save(second)
+
+    assert duplicate == saved_first
+    assert repository.find_latest_by_model("elo", "1.0.0", 1) == saved_second
+    assert connection.execute(
+        "SELECT COUNT(1) FROM model_evaluations"
+    ).fetchone()[0] == 2
+
+    connection.close()
