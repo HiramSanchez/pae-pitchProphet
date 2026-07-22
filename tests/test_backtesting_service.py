@@ -166,6 +166,7 @@ def test_backtest_compares_all_available_models() -> None:
         "elo",
         "elo_form",
         "poisson",
+        "ensemble",
     }
     assert evaluations == sorted(
         evaluations,

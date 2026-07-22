@@ -1,4 +1,9 @@
-from src.models.prediction import TeamRating, VersionedPrediction
+from src.models.prediction import (
+    PredictedResult,
+    Prediction,
+    TeamRating,
+    VersionedPrediction,
+)
 from src.prediction.elo_form_model import EloFormPredictionModel
 from src.prediction.elo_model import EloPredictionModel
 from src.prediction.poisson_model import PoissonPredictionModel
@@ -226,3 +231,56 @@ def test_poisson_explanation_uses_reproducible_output() -> None:
         explanation, "league_goal_averages"
     )["away_value"] == 1.1
     assert "marcador más probable" in service.to_spanish(explanation)
+
+
+def test_ensemble_explanation_detects_component_disagreement() -> None:
+    versioned = VersionedPrediction(
+        match_id=1,
+        model_name="ensemble",
+        model_version="1.0.0",
+        configuration={
+            "weight:elo:1.0.0": 0.5,
+            "weight:poisson:1.0.0": 0.5,
+        },
+        prediction=Prediction(
+            home_team_id=1,
+            away_team_id=2,
+            home_probability=0.45,
+            draw_probability=0.2,
+            away_probability=0.35,
+            predicted_result=PredictedResult.HOME,
+        ),
+        input_snapshot={
+            "home_team": {"team_id": 1},
+            "away_team": {"team_id": 2},
+            "model_configuration": {
+                "weight:elo:1.0.0": 0.5,
+                "weight:poisson:1.0.0": 0.5,
+            },
+            "model_output": {
+                "component_probabilities": {
+                    "elo:1.0.0": {
+                        "home": 0.7,
+                        "draw": 0.2,
+                        "away": 0.1,
+                    },
+                    "poisson:1.0.0": {
+                        "home": 0.2,
+                        "draw": 0.2,
+                        "away": 0.6,
+                    },
+                }
+            },
+        },
+        created_at="2026-07-21T12:00:00+00:00",
+    )
+
+    explanation = ExplanationService().generate(versioned)
+    agreement = factor_by_name(explanation, "model_agreement")
+
+    assert agreement["value"] is False
+    assert agreement["impact"] == "mixed"
+    assert agreement["favorites"] == {
+        "elo:1.0.0": "home",
+        "poisson:1.0.0": "away",
+    }

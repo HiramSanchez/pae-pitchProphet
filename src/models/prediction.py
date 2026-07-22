@@ -55,6 +55,9 @@ class Prediction:
     expected_away_goals: float | None = None
     most_likely_score: tuple[int, int] | None = None
     score_matrix: dict[str, float] | None = None
+    component_probabilities: (
+        dict[str, dict[str, float]] | None
+    ) = None
 
     @property
     def total_probability(self) -> float:

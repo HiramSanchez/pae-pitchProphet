@@ -3,6 +3,7 @@ from src.prediction.explanations import (
     alternative_result,
     build_elo_factors,
     build_elo_form_factors,
+    build_ensemble_factors,
     build_poisson_factors,
     calculate_uncertainty,
 )
@@ -17,23 +18,19 @@ class ExplanationService:
         self,
         versioned_prediction: VersionedPrediction,
     ) -> dict[str, object]:
-        if versioned_prediction.model_name == "elo":
-            factors = build_elo_factors(
-                versioned_prediction.input_snapshot
-            )
-        elif versioned_prediction.model_name == "elo_form":
-            factors = build_elo_form_factors(
-                versioned_prediction.input_snapshot
-            )
-        elif versioned_prediction.model_name == "poisson":
-            factors = build_poisson_factors(
-                versioned_prediction.input_snapshot
-            )
-        else:
+        builders = {
+            "elo": build_elo_factors,
+            "elo_form": build_elo_form_factors,
+            "poisson": build_poisson_factors,
+            "ensemble": build_ensemble_factors,
+        }
+        builder = builders.get(versioned_prediction.model_name)
+        if builder is None:
             raise UnsupportedPredictionModelError(
                 "No explanation strategy for model "
                 f"{versioned_prediction.model_name}"
             )
+        factors = builder(versioned_prediction.input_snapshot)
 
         return {
             "main_factors": factors,

@@ -250,11 +250,29 @@ class PredictionService:
 
     @staticmethod
     def _model_output(prediction: Prediction) -> dict[str, object] | None:
-        if prediction.expected_home_goals is None:
+        if (
+            prediction.expected_home_goals is None
+            and prediction.component_probabilities is None
+        ):
             return None
-        return {
-            "expected_home_goals": prediction.expected_home_goals,
-            "expected_away_goals": prediction.expected_away_goals,
-            "most_likely_score": prediction.most_likely_score,
-            "score_matrix": prediction.score_matrix,
-        }
+        output: dict[str, object] = {}
+        if prediction.expected_home_goals is not None:
+            output.update(
+                {
+                    "expected_home_goals": (
+                        prediction.expected_home_goals
+                    ),
+                    "expected_away_goals": (
+                        prediction.expected_away_goals
+                    ),
+                    "most_likely_score": (
+                        prediction.most_likely_score
+                    ),
+                    "score_matrix": prediction.score_matrix,
+                }
+            )
+        if prediction.component_probabilities is not None:
+            output["component_probabilities"] = (
+                prediction.component_probabilities
+            )
+        return output

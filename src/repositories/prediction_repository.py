@@ -304,6 +304,23 @@ class PredictionRepository:
                     )
                     else None
                 ),
+                component_probabilities=(
+                    {
+                        str(identity): {
+                            str(result): float(probability)
+                            for result, probability in values.items()
+                        }
+                        for identity, values in components.items()
+                        if isinstance(values, dict)
+                    }
+                    if isinstance(
+                        components := model_output.get(
+                            "component_probabilities"
+                        ),
+                        dict,
+                    )
+                    else None
+                ),
             ),
             input_snapshot=snapshot,
             created_at=str(row["created_at"]),

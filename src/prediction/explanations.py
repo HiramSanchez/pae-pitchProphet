@@ -191,6 +191,70 @@ def build_poisson_factors(
     ]
 
 
+def build_ensemble_factors(
+    input_snapshot: dict[str, object],
+) -> list[dict[str, object]]:
+    model_output = input_snapshot.get("model_output")
+    configuration = input_snapshot.get("model_configuration")
+    if not isinstance(model_output, dict):
+        raise ValueError("Invalid ensemble model output snapshot")
+    if not isinstance(configuration, dict):
+        raise ValueError("Invalid model_configuration snapshot")
+    components = model_output.get("component_probabilities")
+    if not isinstance(components, dict) or not components:
+        raise ValueError("Invalid component probabilities snapshot")
+
+    favorites: dict[str, str] = {}
+    component_values: dict[str, dict[str, float]] = {}
+    for identity, probabilities in components.items():
+        if not isinstance(probabilities, dict):
+            raise ValueError("Invalid component prediction snapshot")
+        values = {
+            result: float(probabilities[result])
+            for result in ("home", "draw", "away")
+        }
+        component_values[str(identity)] = values
+        favorites[str(identity)] = max(values, key=values.__getitem__)
+
+    unanimous = len(set(favorites.values())) == 1
+    weights = {
+        key.removeprefix("weight:"): float(value)
+        for key, value in configuration.items()
+        if str(key).startswith("weight:")
+    }
+    return [
+        {
+            "factor": "model_agreement",
+            "impact": (
+                next(iter(favorites.values()))
+                if unanimous
+                else "mixed"
+            ),
+            "value": unanimous,
+            "favorites": favorites,
+            "description": (
+                "Todos los modelos coinciden en el resultado favorito"
+                if unanimous
+                else "Los modelos discrepan sobre el resultado favorito"
+            ),
+        },
+        {
+            "factor": "component_probabilities",
+            "impact": "neutral",
+            "value": component_values,
+            "description": (
+                "La predicción combina las probabilidades de cada modelo"
+            ),
+        },
+        {
+            "factor": "ensemble_weights",
+            "impact": "neutral",
+            "value": weights,
+            "description": "Se aplicaron pesos normalizados por modelo",
+        },
+    ]
+
+
 def calculate_uncertainty(prediction: Prediction) -> str:
     ranked_probabilities = sorted(
         (

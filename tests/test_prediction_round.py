@@ -9,6 +9,8 @@ from src.database.migrations import (
 )
 from src.models.prediction import PredictedResult
 from src.prediction.elo_form_model import EloFormPredictionModel
+from src.prediction.elo_model import EloPredictionModel
+from src.prediction.ensemble_model import EnsemblePredictionModel
 from src.prediction.poisson_model import PoissonPredictionModel
 from src.services.prediction_service import PredictionService
 
@@ -213,6 +215,34 @@ def test_poisson_round_persists_and_recovers_extended_output() -> None:
     assert prediction.score_matrix is not None
     assert snapshot["model_output"]["score_matrix"]
     assert snapshot["home_team"]["home_attack_strength"] == 1.0
+
+    connection.close()
+
+
+def test_ensemble_round_persists_component_predictions() -> None:
+    connection = create_test_database()
+    model = EnsemblePredictionModel(
+        [EloPredictionModel(), PoissonPredictionModel()]
+    )
+    service = PredictionService(connection, model=model)
+
+    first = service.predict_round(1, 2)
+    recovered = service.predict_round(1, 2)
+    snapshot = json.loads(
+        connection.execute(
+            "SELECT input_snapshot_json FROM predictions"
+        ).fetchone()[0]
+    )
+
+    components = recovered[0].prediction.component_probabilities
+    assert recovered == first
+    assert components is not None
+    assert set(components) == {"elo:1.0.0", "poisson:1.0.0"}
+    assert snapshot["model_output"]["component_probabilities"] == (
+        components
+    )
+    assert snapshot["model_configuration"]["weight:elo:1.0.0"] == 0.5
+    assert recovered[0].explanation is not None
 
     connection.close()
 
