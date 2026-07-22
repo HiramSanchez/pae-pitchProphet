@@ -17,6 +17,12 @@ class TeamRating:
     recent_goal_difference: float = 0.0
     home_points_per_match: float = 0.0
     away_points_per_match: float = 0.0
+    home_attack_strength: float = 1.0
+    home_defense_strength: float = 1.0
+    away_attack_strength: float = 1.0
+    away_defense_strength: float = 1.0
+    league_home_goals_average: float = 1.4
+    league_away_goals_average: float = 1.1
 
 
 @dataclass(frozen=True)
@@ -45,6 +51,10 @@ class Prediction:
     draw_probability: float
     away_probability: float
     predicted_result: PredictedResult
+    expected_home_goals: float | None = None
+    expected_away_goals: float | None = None
+    most_likely_score: tuple[int, int] | None = None
+    score_matrix: dict[str, float] | None = None
 
     @property
     def total_probability(self) -> float:

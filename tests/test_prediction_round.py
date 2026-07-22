@@ -9,6 +9,7 @@ from src.database.migrations import (
 )
 from src.models.prediction import PredictedResult
 from src.prediction.elo_form_model import EloFormPredictionModel
+from src.prediction.poisson_model import PoissonPredictionModel
 from src.services.prediction_service import PredictionService
 
 
@@ -155,6 +156,12 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
         "recent_goal_difference": 0.0,
         "home_points_per_match": 0.0,
         "away_points_per_match": 0.0,
+        "home_attack_strength": 1.0,
+        "home_defense_strength": 1.0,
+        "away_attack_strength": 1.0,
+        "away_defense_strength": 1.0,
+        "league_home_goals_average": 1.4,
+        "league_away_goals_average": 1.1,
     }
     assert snapshot["away_team"] == {
         "team_id": 2,
@@ -163,8 +170,15 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
         "recent_goal_difference": 0.0,
         "home_points_per_match": 0.0,
         "away_points_per_match": 0.0,
+        "home_attack_strength": 1.0,
+        "home_defense_strength": 1.0,
+        "away_attack_strength": 1.0,
+        "away_defense_strength": 1.0,
+        "league_home_goals_average": 1.4,
+        "league_away_goals_average": 1.1,
     }
     assert snapshot["model_configuration"] == configuration
+    assert snapshot["model_output"] is None
     assert snapshot["generated_at"]
     assert explanation["main_factors"]
     assert explanation["uncertainty"] in {
@@ -172,6 +186,33 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
         "medium",
         "high",
     }
+
+    connection.close()
+
+
+def test_poisson_round_persists_and_recovers_extended_output() -> None:
+    connection = create_test_database()
+    service = PredictionService(
+        connection,
+        model=PoissonPredictionModel(),
+    )
+
+    first = service.predict_round(1, 2)
+    second = service.predict_round(1, 2)
+    snapshot = json.loads(
+        connection.execute(
+            "SELECT input_snapshot_json FROM predictions"
+        ).fetchone()[0]
+    )
+
+    prediction = second[0].prediction
+    assert second == first
+    assert prediction.expected_home_goals == pytest.approx(1.4)
+    assert prediction.expected_away_goals == pytest.approx(1.1)
+    assert prediction.most_likely_score == (1, 1)
+    assert prediction.score_matrix is not None
+    assert snapshot["model_output"]["score_matrix"]
+    assert snapshot["home_team"]["home_attack_strength"] == 1.0
 
     connection.close()
 

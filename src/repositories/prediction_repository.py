@@ -258,6 +258,10 @@ class PredictionRepository:
         snapshot = json.loads(str(row["input_snapshot_json"]))
         home_team_id = int(snapshot["home_team"]["team_id"])
         away_team_id = int(snapshot["away_team"]["team_id"])
+        model_output = snapshot.get("model_output")
+        if not isinstance(model_output, dict):
+            model_output = {}
+        likely_score = model_output.get("most_likely_score")
         explanation_json = row["explanation_json"]
 
         return VersionedPrediction(
@@ -277,6 +281,29 @@ class PredictionRepository:
                 predicted_result=PredictedResult(
                     str(row["predicted_result"])
                 ),
+                expected_home_goals=PredictionRepository._optional_float(
+                    model_output.get("expected_home_goals")
+                ),
+                expected_away_goals=PredictionRepository._optional_float(
+                    model_output.get("expected_away_goals")
+                ),
+                most_likely_score=(
+                    (int(likely_score[0]), int(likely_score[1]))
+                    if isinstance(likely_score, list)
+                    and len(likely_score) == 2
+                    else None
+                ),
+                score_matrix=(
+                    {
+                        str(score): float(probability)
+                        for score, probability in matrix.items()
+                    }
+                    if isinstance(
+                        matrix := model_output.get("score_matrix"),
+                        dict,
+                    )
+                    else None
+                ),
             ),
             input_snapshot=snapshot,
             created_at=str(row["created_at"]),
@@ -286,3 +313,7 @@ class PredictionRepository:
                 else None
             ),
         )
+
+    @staticmethod
+    def _optional_float(value: object) -> float | None:
+        return float(value) if value is not None else None

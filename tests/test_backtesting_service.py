@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from scripts.backtest_models import backtest_models
 from src.models.prediction import (
     PredictedResult,
@@ -155,7 +157,7 @@ def test_form_state_uses_only_previous_rounds() -> None:
     connection.close()
 
 
-def test_backtest_compares_elo_and_elo_form() -> None:
+def test_backtest_compares_all_available_models() -> None:
     connection = create_test_database()
 
     evaluations = backtest_models(connection, 1)
@@ -163,6 +165,7 @@ def test_backtest_compares_elo_and_elo_form() -> None:
     assert {item.model_name for item in evaluations} == {
         "elo",
         "elo_form",
+        "poisson",
     }
     assert evaluations == sorted(
         evaluations,
@@ -173,5 +176,26 @@ def test_backtest_compares_elo_and_elo_form() -> None:
             -item.accuracy,
         ),
     )
+
+    connection.close()
+
+
+def test_poisson_state_uses_only_previous_rounds() -> None:
+    connection = create_test_database()
+    model = RecordingModel()
+
+    BacktestingService(connection).run(model, 1)
+
+    first_home, second_same_round_home = (
+        model.inputs[0][0],
+        model.inputs[1][0],
+    )
+    second_round_home = model.inputs[2][0]
+    assert first_home.league_home_goals_average == 1.4
+    assert second_same_round_home.league_home_goals_average == 1.4
+    assert second_round_home.league_home_goals_average == pytest.approx(
+        (3 + 5 * 1.4) / 7
+    )
+    assert second_round_home.home_attack_strength > 1.0
 
     connection.close()

@@ -1,6 +1,7 @@
 from src.models.prediction import TeamRating, VersionedPrediction
 from src.prediction.elo_form_model import EloFormPredictionModel
 from src.prediction.elo_model import EloPredictionModel
+from src.prediction.poisson_model import PoissonPredictionModel
 from src.services.explanation_service import ExplanationService
 
 
@@ -175,3 +176,53 @@ def test_elo_form_explanation_contains_snapshot_factors() -> None:
         explanation,
         "venue_performance",
     )["value"] == 1.5
+
+
+def test_poisson_explanation_uses_reproducible_output() -> None:
+    model = PoissonPredictionModel()
+    home = TeamRating(1, "Local", 1500.0)
+    away = TeamRating(2, "Visitante", 1500.0)
+    prediction = model.predict(home, away)
+    versioned = VersionedPrediction(
+        match_id=1,
+        model_name=model.name,
+        model_version=model.version,
+        configuration=model.configuration,
+        prediction=prediction,
+        input_snapshot={
+            "home_team": {
+                "team_id": 1,
+                "home_attack_strength": 1.0,
+                "home_defense_strength": 1.0,
+                "league_home_goals_average": 1.4,
+            },
+            "away_team": {
+                "team_id": 2,
+                "away_attack_strength": 1.0,
+                "away_defense_strength": 1.0,
+                "league_away_goals_average": 1.1,
+            },
+            "model_configuration": model.configuration,
+            "model_output": {
+                "expected_home_goals": prediction.expected_home_goals,
+                "expected_away_goals": prediction.expected_away_goals,
+                "most_likely_score": prediction.most_likely_score,
+                "score_matrix": prediction.score_matrix,
+            },
+        },
+        created_at="2026-07-21T12:00:00+00:00",
+    )
+
+    service = ExplanationService()
+    explanation = service.generate(versioned)
+
+    assert factor_by_name(
+        explanation, "expected_goals"
+    )["home_value"] == 1.4
+    assert factor_by_name(
+        explanation, "most_likely_score"
+    )["value"] == [1, 1]
+    assert factor_by_name(
+        explanation, "league_goal_averages"
+    )["away_value"] == 1.1
+    assert "marcador más probable" in service.to_spanish(explanation)

@@ -123,12 +123,12 @@ class PredictionService:
                     )
                 versioned_prediction = existing
             else:
-                home_team = self._get_team_with_form(
+                home_team = self._get_team_with_features(
                     team_id=match.home_team_id,
                     tournament_id=match.tournament_id,
                     before_round=match.round_number,
                 )
-                away_team = self._get_team_with_form(
+                away_team = self._get_team_with_features(
                     team_id=match.away_team_id,
                     tournament_id=match.tournament_id,
                     before_round=match.round_number,
@@ -145,40 +145,13 @@ class PredictionService:
                     configuration=self.model.configuration,
                     prediction=prediction,
                     input_snapshot={
-                        "home_team": {
-                            "team_id": home_team.team_id,
-                            "elo": home_team.elo,
-                            "recent_points": (
-                                home_team.recent_points
-                            ),
-                            "recent_goal_difference": (
-                                home_team.recent_goal_difference
-                            ),
-                            "home_points_per_match": (
-                                home_team.home_points_per_match
-                            ),
-                            "away_points_per_match": (
-                                home_team.away_points_per_match
-                            ),
-                        },
-                        "away_team": {
-                            "team_id": away_team.team_id,
-                            "elo": away_team.elo,
-                            "recent_points": (
-                                away_team.recent_points
-                            ),
-                            "recent_goal_difference": (
-                                away_team.recent_goal_difference
-                            ),
-                            "home_points_per_match": (
-                                away_team.home_points_per_match
-                            ),
-                            "away_points_per_match": (
-                                away_team.away_points_per_match
-                            ),
-                        },
+                        "home_team": self._team_snapshot(home_team),
+                        "away_team": self._team_snapshot(away_team),
                         "model_configuration": (
                             self.model.configuration
+                        ),
+                        "model_output": self._model_output(
+                            prediction
                         ),
                         "generated_at": generated_at,
                     },
@@ -219,16 +192,32 @@ class PredictionService:
 
         return team
 
-    def _get_team_with_form(
+    def _get_team_with_features(
         self,
         team_id: int,
         tournament_id: int,
         before_round: int,
     ) -> TeamRating:
-        team = self.team_repository.find_rating_with_form(
+        configuration = self.model.configuration
+        team = self.team_repository.find_prediction_features(
             team_id=team_id,
             tournament_id=tournament_id,
             before_round=before_round,
+            prior_matches=float(
+                configuration.get("prior_matches", 5.0)
+            ),
+            default_home_goals=float(
+                configuration.get(
+                    "default_home_goals_average",
+                    1.4,
+                )
+            ),
+            default_away_goals=float(
+                configuration.get(
+                    "default_away_goals_average",
+                    1.1,
+                )
+            ),
         )
 
         if team is None:
@@ -237,3 +226,35 @@ class PredictionService:
             )
 
         return team
+
+    @staticmethod
+    def _team_snapshot(team: TeamRating) -> dict[str, object]:
+        return {
+            "team_id": team.team_id,
+            "elo": team.elo,
+            "recent_points": team.recent_points,
+            "recent_goal_difference": team.recent_goal_difference,
+            "home_points_per_match": team.home_points_per_match,
+            "away_points_per_match": team.away_points_per_match,
+            "home_attack_strength": team.home_attack_strength,
+            "home_defense_strength": team.home_defense_strength,
+            "away_attack_strength": team.away_attack_strength,
+            "away_defense_strength": team.away_defense_strength,
+            "league_home_goals_average": (
+                team.league_home_goals_average
+            ),
+            "league_away_goals_average": (
+                team.league_away_goals_average
+            ),
+        }
+
+    @staticmethod
+    def _model_output(prediction: Prediction) -> dict[str, object] | None:
+        if prediction.expected_home_goals is None:
+            return None
+        return {
+            "expected_home_goals": prediction.expected_home_goals,
+            "expected_away_goals": prediction.expected_away_goals,
+            "most_likely_score": prediction.most_likely_score,
+            "score_matrix": prediction.score_matrix,
+        }

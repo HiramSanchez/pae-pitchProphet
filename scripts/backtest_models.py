@@ -5,6 +5,7 @@ from src.database import database_connection
 from src.models.evaluation import ModelEvaluation
 from src.prediction.elo_form_model import EloFormPredictionModel
 from src.prediction.elo_model import EloPredictionModel
+from src.prediction.poisson_model import PoissonPredictionModel
 from src.services.backtesting_service import BacktestingService
 from src.services.evaluation_service import EvaluationService
 
@@ -13,7 +14,11 @@ def backtest_models(
     connection: sqlite3.Connection,
     tournament_id: int,
 ) -> list[ModelEvaluation]:
-    models = [EloPredictionModel(), EloFormPredictionModel()]
+    models = [
+        EloPredictionModel(),
+        EloFormPredictionModel(),
+        PoissonPredictionModel(),
+    ]
     backtesting_service = BacktestingService(connection)
     evaluation_service = EvaluationService()
     evaluations: list[ModelEvaluation] = []

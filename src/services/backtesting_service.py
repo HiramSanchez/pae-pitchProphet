@@ -3,7 +3,12 @@ from collections import deque
 from dataclasses import dataclass, field
 from itertools import groupby
 
-from src.config import DEFAULT_ELO
+from src.config import (
+    DEFAULT_ELO,
+    POISSON_DEFAULT_AWAY_GOALS,
+    POISSON_DEFAULT_HOME_GOALS,
+    POISSON_PRIOR_MATCHES,
+)
 from src.models.evaluation import BacktestPrediction
 from src.models.match import CompletedMatch
 from src.models.prediction import PredictedResult, TeamRating
@@ -22,11 +27,18 @@ class _TeamFormState:
     home_matches: int = 0
     away_points: int = 0
     away_matches: int = 0
+    home_goals_for: int = 0
+    home_goals_against: int = 0
+    away_goals_for: int = 0
+    away_goals_against: int = 0
 
     def rating(
         self,
         team_id: int,
         name: str,
+        league_home_average: float,
+        league_away_average: float,
+        prior_matches: float,
     ) -> TeamRating:
         return TeamRating(
             team_id=team_id,
@@ -51,7 +63,45 @@ class _TeamFormState:
                 if self.away_matches
                 else 0.0
             ),
+            home_attack_strength=self._strength(
+                self.home_goals_for,
+                self.home_matches,
+                league_home_average,
+                prior_matches,
+            ),
+            home_defense_strength=self._strength(
+                self.home_goals_against,
+                self.home_matches,
+                league_away_average,
+                prior_matches,
+            ),
+            away_attack_strength=self._strength(
+                self.away_goals_for,
+                self.away_matches,
+                league_away_average,
+                prior_matches,
+            ),
+            away_defense_strength=self._strength(
+                self.away_goals_against,
+                self.away_matches,
+                league_home_average,
+                prior_matches,
+            ),
+            league_home_goals_average=league_home_average,
+            league_away_goals_average=league_away_average,
         )
+
+    @staticmethod
+    def _strength(
+        goals: int,
+        matches: int,
+        league_average: float,
+        prior_matches: float,
+    ) -> float:
+        smoothed = (
+            goals + prior_matches * league_average
+        ) / (matches + prior_matches)
+        return smoothed / league_average
 
 
 class BacktestingService:
@@ -73,12 +123,45 @@ class BacktestingService:
         )
         states: dict[int, _TeamFormState] = {}
         backtest_predictions: list[BacktestPrediction] = []
+        league_matches = 0
+        league_home_goals = 0
+        league_away_goals = 0
+        configuration = model.configuration
+        prior_matches = float(
+            configuration.get(
+                "prior_matches", POISSON_PRIOR_MATCHES
+            )
+        )
+        default_home_average = float(
+            configuration.get(
+                "default_home_goals_average",
+                POISSON_DEFAULT_HOME_GOALS,
+            )
+        )
+        default_away_average = float(
+            configuration.get(
+                "default_away_goals_average",
+                POISSON_DEFAULT_AWAY_GOALS,
+            )
+        )
 
         for _, round_matches_iterator in groupby(
             matches,
             key=lambda match: match.round_number,
         ):
             round_matches = list(round_matches_iterator)
+            league_home_average = self._smoothed_average(
+                league_home_goals,
+                league_matches,
+                default_home_average,
+                prior_matches,
+            )
+            league_away_average = self._smoothed_average(
+                league_away_goals,
+                league_matches,
+                default_away_average,
+                prior_matches,
+            )
 
             for match in round_matches:
                 home_state = self._state_for(
@@ -92,10 +175,16 @@ class BacktestingService:
                 home_rating = home_state.rating(
                     match.home_team_id,
                     match.home_team_name,
+                    league_home_average,
+                    league_away_average,
+                    prior_matches,
                 )
                 away_rating = away_state.rating(
                     match.away_team_id,
                     match.away_team_name,
+                    league_home_average,
+                    league_away_average,
+                    prior_matches,
                 )
                 prediction = model.predict(
                     home_rating,
@@ -136,6 +225,9 @@ class BacktestingService:
                     home_goals=match.home_goals,
                     away_goals=match.away_goals,
                 )
+                league_matches += 1
+                league_home_goals += match.home_goals
+                league_away_goals += match.away_goals
 
         return backtest_predictions
 
@@ -175,6 +267,21 @@ class BacktestingService:
         home_state.home_matches += 1
         away_state.away_points += away_points
         away_state.away_matches += 1
+        home_state.home_goals_for += home_goals
+        home_state.home_goals_against += away_goals
+        away_state.away_goals_for += away_goals
+        away_state.away_goals_against += home_goals
+
+    @staticmethod
+    def _smoothed_average(
+        goals: int,
+        matches: int,
+        default_average: float,
+        prior_matches: float,
+    ) -> float:
+        return (
+            goals + prior_matches * default_average
+        ) / (matches + prior_matches)
 
     @staticmethod
     def _actual_result(

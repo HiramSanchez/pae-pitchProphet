@@ -3,6 +3,7 @@ from src.prediction.explanations import (
     alternative_result,
     build_elo_factors,
     build_elo_form_factors,
+    build_poisson_factors,
     calculate_uncertainty,
 )
 
@@ -22,6 +23,10 @@ class ExplanationService:
             )
         elif versioned_prediction.model_name == "elo_form":
             factors = build_elo_form_factors(
+                versioned_prediction.input_snapshot
+            )
+        elif versioned_prediction.model_name == "poisson":
+            factors = build_poisson_factors(
                 versioned_prediction.input_snapshot
             )
         else:
