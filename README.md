@@ -63,6 +63,14 @@ python -m scripts.backtest_models 1
 python -m scripts.evaluate_models 1
 ```
 
+Run the HTTP API:
+
+```bash
+python -m scripts.run_api --host 127.0.0.1 --port 8000
+```
+
+Interactive documentation is available at `/docs` while the API is running.
+
 5. Run the tests:
 ```bash
 python -m pytest

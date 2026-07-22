@@ -59,6 +59,18 @@ class QueryService:
             ),
         )
 
+    def get_predictions_for_round(
+        self, tournament_id: int, round_number: int
+    ) -> list[PredictionView]:
+        return self.predictions.find_views_by_round(
+            tournament_id, round_number
+        )
+
+    def get_model_performance(
+        self, tournament_id: int
+    ) -> list[ModelEvaluation]:
+        return self.evaluations.find_latest_for_tournament(tournament_id)
+
     def get_prediction_explanation(
         self,
         match_id: int,

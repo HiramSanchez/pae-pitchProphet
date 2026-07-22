@@ -103,6 +103,9 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
 - Scheduled prediction updates archive immutable revisions only when the input
   snapshot changes. Completed predictions are immutable; changed-prediction
   queries compare the latest archived revision with current persisted state.
+- FastAPI endpoints depend on services through an injected per-request SQLite
+  connection. The initial Spanish conversational interpreter is deterministic;
+  it selects `QueryService` operations and never calculates probabilities.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 
@@ -117,6 +120,7 @@ python -m pytest
 python -m scripts.predict_round <tournament_id> <round_number>
 python -m scripts.backtest_models <tournament_id>
 python -m scripts.evaluate_models <tournament_id>
+python -m scripts.run_api --host 127.0.0.1 --port 8000
 ```
 
 Use `python -m ...` for project scripts. Use `rg`/`rg --files` for searches.

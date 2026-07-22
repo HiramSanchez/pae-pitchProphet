@@ -16,7 +16,7 @@ from src.services.data_update_service import DataUpdateService
 
 
 def database() -> sqlite3.Connection:
-    connection = sqlite3.connect(":memory:")
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
     connection.row_factory = sqlite3.Row
     connection.execute("PRAGMA foreign_keys = ON")
     connection.executescript(SCHEMA)
