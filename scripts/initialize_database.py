@@ -1,4 +1,11 @@
 from src.database import database_connection
+from src.database.migrations import (
+    migrate_evaluation_persistence_schema,
+    migrate_prediction_persistence_schema,
+    migrate_prediction_revisions_schema,
+    migrate_team_statistics_schema,
+    migrate_update_pipeline_schema,
+)
 
 
 SCHEMA = """
@@ -107,22 +114,6 @@ CREATE TABLE IF NOT EXISTS absences (
     FOREIGN KEY(team_id) REFERENCES teams(id)
 );
 
-CREATE TABLE IF NOT EXISTS predictions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    match_id INTEGER NOT NULL,
-    predictor TEXT NOT NULL,
-    predicted_outcome TEXT NOT NULL
-        CHECK(predicted_outcome IN ('home', 'draw', 'away')),
-    home_probability REAL,
-    draw_probability REAL,
-    away_probability REAL,
-    is_final INTEGER NOT NULL DEFAULT 1,
-    points_awarded INTEGER,
-    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    UNIQUE(match_id, predictor, is_final),
-    FOREIGN KEY(match_id) REFERENCES matches(id)
-);
-
 CREATE TABLE IF NOT EXISTS elo_history (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     team_id INTEGER NOT NULL,
@@ -145,9 +136,6 @@ ON players(team_id);
 CREATE INDEX IF NOT EXISTS idx_absences_team_status
 ON absences(team_id, status);
 
-CREATE INDEX IF NOT EXISTS idx_predictions_predictor
-ON predictions(predictor);
-
 CREATE INDEX IF NOT EXISTS idx_elo_history_team
 ON elo_history(team_id, round_number);
 """
@@ -156,6 +144,11 @@ ON elo_history(team_id, round_number);
 def initialize_database() -> None:
     with database_connection() as connection:
         connection.executescript(SCHEMA)
+        migrate_team_statistics_schema(connection)
+        migrate_prediction_persistence_schema(connection)
+        migrate_prediction_revisions_schema(connection)
+        migrate_evaluation_persistence_schema(connection)
+        migrate_update_pipeline_schema(connection)
 
     print("Base de datos inicializada correctamente.")
 
