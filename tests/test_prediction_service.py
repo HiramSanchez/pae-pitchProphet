@@ -9,6 +9,7 @@ from src.models.prediction import (
     TeamRating,
 )
 from src.services.prediction_service import (
+    InvalidPredictionError,
     PredictionService,
     TeamNotFoundError,
 )
@@ -246,5 +247,33 @@ def test_service_delegates_prediction_to_injected_model() -> None:
         ),
     )
     assert prediction.predicted_result == PredictedResult.AWAY
+
+    connection.close()
+
+
+def test_service_rejects_invalid_model_probabilities() -> None:
+    class InvalidModel(StubPredictionModel):
+        def predict(
+            self,
+            home_team: TeamRating,
+            away_team: TeamRating,
+        ) -> Prediction:
+            return Prediction(
+                home_team.team_id,
+                away_team.team_id,
+                0.8,
+                0.4,
+                -0.2,
+                PredictedResult.HOME,
+            )
+
+    connection = create_test_database()
+    service = PredictionService(connection, model=InvalidModel())
+
+    with pytest.raises(InvalidPredictionError):
+        service.predict_from_ratings(
+            TeamRating(1, "Local", 1500.0),
+            TeamRating(2, "Visitante", 1500.0),
+        )
 
     connection.close()

@@ -1,4 +1,5 @@
 import json
+import math
 import sqlite3
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -29,6 +30,10 @@ from src.services.explanation_service import ExplanationService
 
 class TeamNotFoundError(ValueError):
     """Raised when a requested team does not exist."""
+
+
+class InvalidPredictionError(ValueError):
+    """Raised when a model returns invalid probabilities."""
 
 
 class PredictionService:
@@ -78,10 +83,24 @@ class PredictionService:
         home_team: TeamRating,
         away_team: TeamRating,
     ) -> Prediction:
-        return self.model.predict(
+        prediction = self.model.predict(
             home_team=home_team,
             away_team=away_team,
         )
+        probabilities = (
+            prediction.home_probability,
+            prediction.draw_probability,
+            prediction.away_probability,
+        )
+        if (
+            any(not math.isfinite(value) or not 0 <= value <= 1
+                for value in probabilities)
+            or not math.isclose(sum(probabilities), 1.0, abs_tol=1e-9)
+        ):
+            raise InvalidPredictionError(
+                f"Model {self.model.name} returned invalid probabilities"
+            )
+        return prediction
 
     def predict_round(
         self,

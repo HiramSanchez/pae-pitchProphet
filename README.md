@@ -71,6 +71,15 @@ python -m scripts.run_api --host 127.0.0.1 --port 8000
 
 Interactive documentation is available at `/docs` while the API is running.
 
+Run an idempotent automated update with bounded retries:
+
+```bash
+python -m scripts.run_automated_update --source-file matches.json --source-name scheduled-file --max-attempts 3 --retry-delay 10 --log-file logs/pitchprophet.jsonl
+```
+
+For periodic local execution, see
+[Windows Task Scheduler](docs/windows-task-scheduler.md).
+
 5. Run the tests:
 ```bash
 python -m pytest

@@ -1,16 +1,9 @@
 import argparse
 from pathlib import Path
 
-from src.data_sources.external_api_source import ExternalApiMatchDataSource
-from src.data_sources.manual_source import ManualMatchDataSource
+from src.data_sources.factory import create_match_data_source
 from src.database import database_connection
-from src.database.migrations import (
-    migrate_evaluation_persistence_schema,
-    migrate_prediction_persistence_schema,
-    migrate_prediction_revisions_schema,
-    migrate_team_statistics_schema,
-    migrate_update_pipeline_schema,
-)
+from src.database.migrations import migrate_runtime_schema
 from src.services.data_update_service import DataUpdateService
 
 
@@ -24,23 +17,14 @@ def main() -> None:
     parser.add_argument("--source-name", default="manual")
     parser.add_argument("--timeout", type=float, default=10.0)
     arguments = parser.parse_args()
-    data_source = (
-        ManualMatchDataSource.from_json_file(
-            arguments.source_file, arguments.source_name
-        )
-        if arguments.source_file is not None
-        else ExternalApiMatchDataSource(
-            arguments.api_url,
-            name=arguments.source_name,
-            timeout=arguments.timeout,
-        )
+    data_source = create_match_data_source(
+        arguments.source_file,
+        arguments.api_url,
+        arguments.source_name,
+        arguments.timeout,
     )
     with database_connection() as connection:
-        migrate_team_statistics_schema(connection)
-        migrate_prediction_persistence_schema(connection)
-        migrate_prediction_revisions_schema(connection)
-        migrate_evaluation_persistence_schema(connection)
-        migrate_update_pipeline_schema(connection)
+        migrate_runtime_schema(connection)
         result = DataUpdateService(connection).run(data_source)
     print(
         f"Actualización {result.run_id}: {result.matches_added} nuevos, "
