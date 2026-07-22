@@ -9,6 +9,24 @@ The project currently provides a complete local backend and API. It does not
 include a graphical frontend, a ChatGPT-like chat interface, live commercial
 data feeds, or an LLM integration.
 
+## Table of Contents
+
+- [Features](#features)
+- [Architecture](#architecture)
+- [Project structure](#project-structure)
+- [Requirements and installation](#requirements-and-installation)
+- [Database setup](#database-setup)
+- [Running the data update pipeline](#running-the-data-update-pipeline)
+- [Running the API](#running-the-api)
+- [API endpoints](#api-endpoints)
+- [How to use PitchProphet](#how-to-use-pitchprophet)
+- [Understanding prediction output](#understanding-prediction-output)
+- [Testing](#testing)
+- [Automation](#automation)
+- [Troubleshooting](#troubleshooting)
+- [Limitations and future work](#limitations-and-future-work)
+- [Documentation](#documentation)
+
 ## Features
 
 - Four versioned prediction models:
