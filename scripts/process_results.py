@@ -1,7 +1,7 @@
 import sqlite3
 
 from src.database import database_connection
-from src.elo import update_elo
+from src.services.elo_service import update_elo
 
 
 def get_completed_unprocessed_matches(

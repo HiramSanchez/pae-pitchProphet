@@ -37,7 +37,7 @@ def show_user_summary() -> None:
             SELECT
                 COUNT(*) AS total,
                 COALESCE(SUM(points_awarded), 0) AS correct
-            FROM predictions
+            FROM user_predictions
             WHERE predictor = 'Hiram'
               AND is_final = 1
               AND points_awarded IS NOT NULL
