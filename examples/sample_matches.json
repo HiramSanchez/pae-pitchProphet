@@ -1,0 +1,50 @@
+[
+  {
+    "external_match_id": "sample-2026-r1-aurora-centellas",
+    "tournament_name": "Liga de Ejemplo",
+    "season": "2026",
+    "round_number": 1,
+    "home_team_name": "Aurora FC",
+    "away_team_name": "Centellas",
+    "status": "completed",
+    "match_date": "2026-07-05T18:00:00+00:00",
+    "home_goals": 2,
+    "away_goals": 1
+  },
+  {
+    "external_match_id": "sample-2026-r1-deportivo-bosque-marineros",
+    "tournament_name": "Liga de Ejemplo",
+    "season": "2026",
+    "round_number": 1,
+    "home_team_name": "Deportivo Bosque",
+    "away_team_name": "Marineros SC",
+    "status": "completed",
+    "match_date": "2026-07-05T20:00:00+00:00",
+    "home_goals": 0,
+    "away_goals": 0
+  },
+  {
+    "external_match_id": "sample-2026-r2-centellas-deportivo-bosque",
+    "tournament_name": "Liga de Ejemplo",
+    "season": "2026",
+    "round_number": 2,
+    "home_team_name": "Centellas",
+    "away_team_name": "Deportivo Bosque",
+    "status": "scheduled",
+    "match_date": "2026-07-12T18:00:00+00:00",
+    "home_goals": null,
+    "away_goals": null
+  },
+  {
+    "external_match_id": "sample-2026-r2-marineros-aurora",
+    "tournament_name": "Liga de Ejemplo",
+    "season": "2026",
+    "round_number": 2,
+    "home_team_name": "Marineros SC",
+    "away_team_name": "Aurora FC",
+    "status": "scheduled",
+    "match_date": "2026-07-12T20:00:00+00:00",
+    "home_goals": null,
+    "away_goals": null
+  }
+]

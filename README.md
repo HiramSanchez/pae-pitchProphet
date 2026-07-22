@@ -71,6 +71,17 @@ python -m scripts.run_api --host 127.0.0.1 --port 8000
 
 Interactive documentation is available at `/docs` while the API is running.
 
+Run the complete local update example:
+
+```bash
+python -m scripts.update_data --source-file examples/sample_matches.json --source-name sample
+```
+
+The sample imports completed and scheduled matches, evaluates every active
+model, and generates predictions for the next round. Expected results, the
+exact JSON contract, update testing, and verification queries are documented
+in the [user guide](docs/user-guide.md).
+
 Run an idempotent automated update with bounded retries:
 
 ```bash
