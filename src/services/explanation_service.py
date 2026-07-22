@@ -2,6 +2,7 @@ from src.models.prediction import VersionedPrediction
 from src.prediction.explanations import (
     alternative_result,
     build_elo_factors,
+    build_elo_form_factors,
     calculate_uncertainty,
 )
 
@@ -15,16 +16,22 @@ class ExplanationService:
         self,
         versioned_prediction: VersionedPrediction,
     ) -> dict[str, object]:
-        if versioned_prediction.model_name != "elo":
+        if versioned_prediction.model_name == "elo":
+            factors = build_elo_factors(
+                versioned_prediction.input_snapshot
+            )
+        elif versioned_prediction.model_name == "elo_form":
+            factors = build_elo_form_factors(
+                versioned_prediction.input_snapshot
+            )
+        else:
             raise UnsupportedPredictionModelError(
                 "No explanation strategy for model "
                 f"{versioned_prediction.model_name}"
             )
 
         return {
-            "main_factors": build_elo_factors(
-                versioned_prediction.input_snapshot
-            ),
+            "main_factors": factors,
             "uncertainty": calculate_uncertainty(
                 versioned_prediction.prediction
             ),

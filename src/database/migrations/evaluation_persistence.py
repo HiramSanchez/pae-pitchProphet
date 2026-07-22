@@ -23,8 +23,15 @@ def migrate_evaluation_persistence_schema(
                 evaluated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
             );
 
-            CREATE INDEX IF NOT EXISTS idx_model_evaluations_ranking
-            ON model_evaluations(log_loss, brier_score, accuracy);
+            DROP INDEX IF EXISTS idx_model_evaluations_ranking;
+
+            CREATE INDEX idx_model_evaluations_ranking
+            ON model_evaluations(
+                log_loss,
+                calibration_error,
+                brier_score,
+                accuracy
+            );
 
             COMMIT;
             """

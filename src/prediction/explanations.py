@@ -50,6 +50,70 @@ def build_elo_factors(
     ]
 
 
+def build_elo_form_factors(
+    input_snapshot: dict[str, object],
+) -> list[dict[str, object]]:
+    factors = build_elo_factors(input_snapshot)
+    home_team = input_snapshot["home_team"]
+    away_team = input_snapshot["away_team"]
+    configuration = input_snapshot["model_configuration"]
+
+    if not isinstance(home_team, dict):
+        raise ValueError("Invalid home_team snapshot")
+    if not isinstance(away_team, dict):
+        raise ValueError("Invalid away_team snapshot")
+    if not isinstance(configuration, dict):
+        raise ValueError("Invalid model_configuration snapshot")
+
+    form_values = [
+        (
+            "recent_points",
+            float(home_team["recent_points"])
+            - float(away_team["recent_points"]),
+            float(configuration["recent_points_weight"]),
+            "El rendimiento reciente favorece al {team}",
+        ),
+        (
+            "recent_goal_difference",
+            float(home_team["recent_goal_difference"])
+            - float(away_team["recent_goal_difference"]),
+            float(
+                configuration["recent_goal_difference_weight"]
+            ),
+            "La diferencia de goles reciente favorece al {team}",
+        ),
+        (
+            "venue_performance",
+            float(home_team["home_points_per_match"])
+            - float(away_team["away_points_per_match"]),
+            float(configuration["venue_performance_weight"]),
+            "El rendimiento por condición favorece al {team}",
+        ),
+    ]
+
+    for factor_name, value, weight, description in form_values:
+        if value > 0:
+            impact = "home"
+            team_label = "equipo local"
+        elif value < 0:
+            impact = "away"
+            team_label = "equipo visitante"
+        else:
+            impact = "neutral"
+            team_label = "ningún equipo"
+        factors.append(
+            {
+                "factor": factor_name,
+                "impact": impact,
+                "value": value,
+                "weight": weight,
+                "description": description.format(team=team_label),
+            }
+        )
+
+    return factors
+
+
 def calculate_uncertainty(prediction: Prediction) -> str:
     ranked_probabilities = sorted(
         (

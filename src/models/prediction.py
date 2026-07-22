@@ -13,6 +13,10 @@ class TeamRating:
     team_id: int
     name: str
     elo: float
+    recent_points: float = 0.0
+    recent_goal_difference: float = 0.0
+    home_points_per_match: float = 0.0
+    away_points_per_match: float = 0.0
 
 
 @dataclass(frozen=True)

@@ -123,8 +123,16 @@ class PredictionService:
                     )
                 versioned_prediction = existing
             else:
-                home_team = self._get_team(match.home_team_id)
-                away_team = self._get_team(match.away_team_id)
+                home_team = self._get_team_with_form(
+                    team_id=match.home_team_id,
+                    tournament_id=match.tournament_id,
+                    before_round=match.round_number,
+                )
+                away_team = self._get_team_with_form(
+                    team_id=match.away_team_id,
+                    tournament_id=match.tournament_id,
+                    before_round=match.round_number,
+                )
                 prediction = self.predict_from_ratings(
                     home_team=home_team,
                     away_team=away_team,
@@ -140,10 +148,34 @@ class PredictionService:
                         "home_team": {
                             "team_id": home_team.team_id,
                             "elo": home_team.elo,
+                            "recent_points": (
+                                home_team.recent_points
+                            ),
+                            "recent_goal_difference": (
+                                home_team.recent_goal_difference
+                            ),
+                            "home_points_per_match": (
+                                home_team.home_points_per_match
+                            ),
+                            "away_points_per_match": (
+                                home_team.away_points_per_match
+                            ),
                         },
                         "away_team": {
                             "team_id": away_team.team_id,
                             "elo": away_team.elo,
+                            "recent_points": (
+                                away_team.recent_points
+                            ),
+                            "recent_goal_difference": (
+                                away_team.recent_goal_difference
+                            ),
+                            "home_points_per_match": (
+                                away_team.home_points_per_match
+                            ),
+                            "away_points_per_match": (
+                                away_team.away_points_per_match
+                            ),
                         },
                         "model_configuration": (
                             self.model.configuration
@@ -179,6 +211,25 @@ class PredictionService:
 
     def _get_team(self, team_id: int) -> TeamRating:
         team = self.team_repository.find_rating_by_id(team_id)
+
+        if team is None:
+            raise TeamNotFoundError(
+                f"Team with id {team_id} was not found"
+            )
+
+        return team
+
+    def _get_team_with_form(
+        self,
+        team_id: int,
+        tournament_id: int,
+        before_round: int,
+    ) -> TeamRating:
+        team = self.team_repository.find_rating_with_form(
+            team_id=team_id,
+            tournament_id=tournament_id,
+            before_round=before_round,
+        )
 
         if team is None:
             raise TeamNotFoundError(

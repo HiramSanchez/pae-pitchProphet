@@ -61,7 +61,12 @@ class EvaluationRepository:
                 """
                 SELECT *
                 FROM model_evaluations
-                ORDER BY log_loss, brier_score, accuracy DESC, id
+                ORDER BY
+                    log_loss,
+                    calibration_error,
+                    brier_score,
+                    accuracy DESC,
+                    id
                 """
             ).fetchall()
         else:
@@ -70,7 +75,12 @@ class EvaluationRepository:
                 SELECT *
                 FROM model_evaluations
                 WHERE tournament_id = ?
-                ORDER BY log_loss, brier_score, accuracy DESC, id
+                ORDER BY
+                    log_loss,
+                    calibration_error,
+                    brier_score,
+                    accuracy DESC,
+                    id
                 """,
                 (tournament_id,),
             ).fetchall()

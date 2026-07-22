@@ -53,6 +53,97 @@ class TeamRepository:
             elo=float(row["current_elo"]),
         )
 
+    def find_rating_with_form(
+        self,
+        team_id: int,
+        tournament_id: int,
+        before_round: int,
+    ) -> TeamRating | None:
+        team = self.find_rating_by_id(team_id)
+        if team is None:
+            return None
+
+        rows = self.connection.execute(
+            """
+            SELECT
+                id,
+                home_team_id,
+                away_team_id,
+                home_goals,
+                away_goals
+            FROM matches
+            WHERE tournament_id = ?
+              AND round_number < ?
+              AND status = 'completed'
+              AND home_goals IS NOT NULL
+              AND away_goals IS NOT NULL
+              AND (home_team_id = ? OR away_team_id = ?)
+            ORDER BY round_number DESC, id DESC
+            """,
+            (
+                tournament_id,
+                before_round,
+                team_id,
+                team_id,
+            ),
+        ).fetchall()
+
+        recent_points = 0
+        recent_goal_difference = 0
+        home_points = 0
+        home_matches = 0
+        away_points = 0
+        away_matches = 0
+
+        for index, row in enumerate(rows):
+            is_home = int(row["home_team_id"]) == team_id
+            goals_for = int(
+                row["home_goals"] if is_home else row["away_goals"]
+            )
+            goals_against = int(
+                row["away_goals"] if is_home else row["home_goals"]
+            )
+            points = self._points(goals_for, goals_against)
+
+            if index < 5:
+                recent_points += points
+                recent_goal_difference += goals_for - goals_against
+
+            if is_home:
+                home_points += points
+                home_matches += 1
+            else:
+                away_points += points
+                away_matches += 1
+
+        return TeamRating(
+            team_id=team.team_id,
+            name=team.name,
+            elo=team.elo,
+            recent_points=float(recent_points),
+            recent_goal_difference=float(
+                recent_goal_difference
+            ),
+            home_points_per_match=(
+                home_points / home_matches
+                if home_matches
+                else 0.0
+            ),
+            away_points_per_match=(
+                away_points / away_matches
+                if away_matches
+                else 0.0
+            ),
+        )
+
+    @staticmethod
+    def _points(goals_for: int, goals_against: int) -> int:
+        if goals_for > goals_against:
+            return 3
+        if goals_for == goals_against:
+            return 1
+        return 0
+
     def reset_statistics(self) -> None:
         self.connection.execute(
             """

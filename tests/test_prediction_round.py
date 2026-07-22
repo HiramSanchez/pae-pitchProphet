@@ -8,6 +8,7 @@ from src.database.migrations import (
     migrate_prediction_persistence_schema,
 )
 from src.models.prediction import PredictedResult
+from src.prediction.elo_form_model import EloFormPredictionModel
 from src.services.prediction_service import PredictionService
 
 
@@ -150,10 +151,18 @@ def test_predict_round_stores_reproducible_snapshot() -> None:
     assert snapshot["home_team"] == {
         "team_id": 1,
         "elo": 1500.0,
+        "recent_points": 0.0,
+        "recent_goal_difference": 0.0,
+        "home_points_per_match": 0.0,
+        "away_points_per_match": 0.0,
     }
     assert snapshot["away_team"] == {
         "team_id": 2,
         "elo": 1500.0,
+        "recent_points": 0.0,
+        "recent_goal_difference": 0.0,
+        "home_points_per_match": 0.0,
+        "away_points_per_match": 0.0,
     }
     assert snapshot["model_configuration"] == configuration
     assert snapshot["generated_at"]
@@ -206,5 +215,46 @@ def test_display_predictions_includes_spanish_explanation(
     output = capsys.readouterr().out
     assert "Incertidumbre" in output
     assert "Resultado alternativo" in output
+
+    connection.close()
+
+
+def test_elo_form_round_snapshot_contains_all_features() -> None:
+    connection = create_test_database()
+    service = PredictionService(
+        connection,
+        model=EloFormPredictionModel(),
+    )
+
+    service.predict_round(1, 3)
+
+    row = connection.execute(
+        """
+        SELECT input_snapshot_json, explanation_json
+        FROM predictions
+        WHERE model_name = 'elo_form'
+        """
+    ).fetchone()
+    snapshot = json.loads(row["input_snapshot_json"])
+    explanation = json.loads(row["explanation_json"])
+
+    assert snapshot["home_team"]["recent_points"] == 3.0
+    assert snapshot["home_team"]["home_points_per_match"] == 3.0
+    assert snapshot["away_team"]["recent_points"] == 0.0
+    assert snapshot["away_team"]["away_points_per_match"] == 0.0
+    assert "recent_points_weight" in snapshot[
+        "model_configuration"
+    ]
+    factor_names = {
+        factor["factor"]
+        for factor in explanation["main_factors"]
+    }
+    assert {
+        "elo_difference",
+        "home_advantage",
+        "recent_points",
+        "recent_goal_difference",
+        "venue_performance",
+    } == factor_names
 
     connection.close()
