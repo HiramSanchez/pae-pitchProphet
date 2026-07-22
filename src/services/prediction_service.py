@@ -1,3 +1,4 @@
+import json
 import sqlite3
 from dataclasses import replace
 from datetime import datetime, timezone
@@ -205,9 +206,12 @@ class PredictionService:
             "model_configuration": self.model.configuration,
             "model_output": self._model_output(prediction),
         }
-        if all(
-            existing.input_snapshot.get(key) == value
-            for key, value in comparable.items()
+        existing_comparable = {
+            key: existing.input_snapshot.get(key)
+            for key in comparable
+        }
+        if self._canonical_json(existing_comparable) == self._canonical_json(
+            comparable
         ):
             return existing
         generated_at = datetime.now(timezone.utc).isoformat()
@@ -226,6 +230,15 @@ class PredictionService:
             explanation=self.explanation_service.generate(refreshed),
         )
         return self.prediction_repository.update_scheduled(refreshed)
+
+    @staticmethod
+    def _canonical_json(value: object) -> str:
+        return json.dumps(
+            value,
+            ensure_ascii=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
 
     def _get_team(self, team_id: int) -> TeamRating:
         team = self.team_repository.find_rating_by_id(team_id)

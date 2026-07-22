@@ -122,6 +122,44 @@ class EvaluationRepository:
             ).fetchall()
         return [self._from_row(row) for row in rows]
 
+    def find_latest_for_tournament(
+        self, tournament_id: int
+    ) -> list[ModelEvaluation]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM (
+                SELECT model_evaluations.*,
+                    ROW_NUMBER() OVER (
+                        PARTITION BY model_name, model_version
+                        ORDER BY evaluated_at DESC, id DESC
+                    ) AS position
+                FROM model_evaluations WHERE tournament_id = ?
+            ) WHERE position = 1
+            ORDER BY log_loss, calibration_error, brier_score,
+                accuracy DESC, id
+            """,
+            (tournament_id,),
+        ).fetchall()
+        return [self._from_row(row) for row in rows]
+
+    def find_recent_by_model(
+        self,
+        model_name: str,
+        model_version: str,
+        tournament_id: int,
+        limit: int,
+    ) -> list[ModelEvaluation]:
+        rows = self.connection.execute(
+            """
+            SELECT * FROM model_evaluations
+            WHERE model_name = ? AND model_version = ?
+              AND tournament_id = ?
+            ORDER BY evaluated_at DESC, id DESC LIMIT ?
+            """,
+            (model_name, model_version, tournament_id, limit),
+        ).fetchall()
+        return [self._from_row(row) for row in rows]
+
     @staticmethod
     def _from_row(row: sqlite3.Row) -> ModelEvaluation:
         return ModelEvaluation(

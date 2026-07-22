@@ -98,6 +98,11 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   and row id.
 - Update attempts always retain a sanitized `update_runs` audit row while
   failed functional changes are rolled back.
+- `QueryService` is the structured read boundary for API/conversation. It
+  returns domain dataclasses, never SQLite rows or presentation text.
+- Scheduled prediction updates archive immutable revisions only when the input
+  snapshot changes. Completed predictions are immutable; changed-prediction
+  queries compare the latest archived revision with current persisted state.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 

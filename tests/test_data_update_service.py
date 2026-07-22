@@ -7,6 +7,7 @@ from src.data_sources.manual_source import ManualMatchDataSource
 from src.database.migrations import (
     migrate_evaluation_persistence_schema,
     migrate_prediction_persistence_schema,
+    migrate_prediction_revisions_schema,
     migrate_team_statistics_schema,
     migrate_update_pipeline_schema,
 )
@@ -21,6 +22,7 @@ def database() -> sqlite3.Connection:
     connection.executescript(SCHEMA)
     migrate_team_statistics_schema(connection)
     migrate_prediction_persistence_schema(connection)
+    migrate_prediction_revisions_schema(connection)
     migrate_evaluation_persistence_schema(connection)
     migrate_update_pipeline_schema(connection)
     return connection
@@ -70,6 +72,9 @@ def test_pipeline_is_idempotent_and_keeps_evaluation_history() -> None:
         "SELECT COUNT(1) FROM predictions"
     ).fetchone()[0] == 4
     assert connection.execute(
+        "SELECT COUNT(1) FROM prediction_revisions"
+    ).fetchone()[0] == 0
+    assert connection.execute(
         "SELECT COUNT(1) FROM model_evaluations"
     ).fetchone()[0] == 4
     assert connection.execute(
@@ -90,6 +95,9 @@ def test_pipeline_is_idempotent_and_keeps_evaluation_history() -> None:
         "SELECT input_snapshot_json FROM predictions ORDER BY id LIMIT 1"
     ).fetchone()[0]
     assert snapshot_after != snapshot_before
+    assert connection.execute(
+        "SELECT COUNT(1) FROM prediction_revisions"
+    ).fetchone()[0] == 4
 
 
 def test_completed_match_prediction_is_not_refreshed() -> None:
@@ -112,6 +120,9 @@ def test_completed_match_prediction_is_not_refreshed() -> None:
     assert connection.execute(
         "SELECT input_snapshot_json FROM predictions ORDER BY id"
     ).fetchall() == stored
+    assert connection.execute(
+        "SELECT COUNT(1) FROM prediction_revisions"
+    ).fetchone()[0] == 0
 
 
 def test_failed_pipeline_rolls_back_data_but_keeps_sanitized_audit() -> None:

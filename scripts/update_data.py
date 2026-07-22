@@ -7,6 +7,7 @@ from src.database import database_connection
 from src.database.migrations import (
     migrate_evaluation_persistence_schema,
     migrate_prediction_persistence_schema,
+    migrate_prediction_revisions_schema,
     migrate_team_statistics_schema,
     migrate_update_pipeline_schema,
 )
@@ -37,6 +38,7 @@ def main() -> None:
     with database_connection() as connection:
         migrate_team_statistics_schema(connection)
         migrate_prediction_persistence_schema(connection)
+        migrate_prediction_revisions_schema(connection)
         migrate_evaluation_persistence_schema(connection)
         migrate_update_pipeline_schema(connection)
         result = DataUpdateService(connection).run(data_source)

@@ -1,11 +1,13 @@
 import json
 import sqlite3
+from datetime import datetime, timezone
 
 from src.models.prediction import (
     PredictedResult,
     Prediction,
     VersionedPrediction,
 )
+from src.models.query import PredictionRevision, PredictionView
 
 
 class PredictionAlreadyExistsError(ValueError):
@@ -214,6 +216,43 @@ class PredictionRepository:
         ).fetchone()
         if status is None or str(status["status"]) != "scheduled":
             raise ValueError("Only scheduled predictions can be refreshed")
+        current = self.connection.execute(
+            """
+            SELECT * FROM predictions
+            WHERE match_id = ? AND model_name = ? AND model_version = ?
+            """,
+            (
+                prediction.match_id,
+                prediction.model_name,
+                prediction.model_version,
+            ),
+        ).fetchone()
+        if current is None:
+            raise ValueError("Prediction to refresh was not found")
+        snapshot_json = self._serialize(prediction.input_snapshot)
+        if str(current["input_snapshot_json"]) == snapshot_json:
+            return prediction
+        self.connection.execute(
+            """
+            INSERT INTO prediction_revisions (
+                prediction_id, match_id, model_name, model_version,
+                home_probability, draw_probability, away_probability,
+                predicted_result, confidence, input_snapshot_json,
+                explanation_json, created_at, replaced_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                int(current["id"]), int(current["match_id"]),
+                str(current["model_name"]), str(current["model_version"]),
+                float(current["home_probability"]),
+                float(current["draw_probability"]),
+                float(current["away_probability"]),
+                str(current["predicted_result"]), float(current["confidence"]),
+                str(current["input_snapshot_json"]),
+                current["explanation_json"], str(current["created_at"]),
+                datetime.now(timezone.utc).isoformat(),
+            ),
+        )
         self.connection.execute(
             """
             UPDATE predictions SET home_probability = ?, draw_probability = ?,
@@ -227,7 +266,7 @@ class PredictionRepository:
                 prediction.prediction.away_probability,
                 prediction.prediction.predicted_result.value,
                 prediction.confidence,
-                self._serialize(prediction.input_snapshot),
+                snapshot_json,
                 self._serialize(prediction.explanation),
                 prediction.created_at,
                 prediction.match_id,
@@ -236,6 +275,138 @@ class PredictionRepository:
             ),
         )
         return prediction
+
+    def find_views_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[PredictionView]:
+        rows = self.connection.execute(
+            """
+            SELECT p.*, mv.configuration_json,
+                m.tournament_id, m.round_number,
+                home.name AS home_team_name,
+                away.name AS away_team_name
+            FROM predictions p
+            JOIN model_versions mv ON mv.model_name = p.model_name
+                AND mv.model_version = p.model_version
+            JOIN matches m ON m.id = p.match_id
+            JOIN teams home ON home.id = m.home_team_id
+            JOIN teams away ON away.id = m.away_team_id
+            WHERE m.tournament_id = ? AND m.round_number = ?
+            ORDER BY p.match_id, p.model_name, p.model_version
+            """,
+            (tournament_id, round_number),
+        ).fetchall()
+        return [self._view_from_row(row) for row in rows]
+
+    def find_views_by_match(self, match_id: int) -> list[PredictionView]:
+        rows = self.connection.execute(
+            """
+            SELECT p.*, mv.configuration_json,
+                m.tournament_id, m.round_number,
+                home.name AS home_team_name,
+                away.name AS away_team_name
+            FROM predictions p
+            JOIN model_versions mv ON mv.model_name = p.model_name
+                AND mv.model_version = p.model_version
+            JOIN matches m ON m.id = p.match_id
+            JOIN teams home ON home.id = m.home_team_id
+            JOIN teams away ON away.id = m.away_team_id
+            WHERE p.match_id = ?
+            ORDER BY p.model_name, p.model_version
+            """,
+            (match_id,),
+        ).fetchall()
+        return [self._view_from_row(row) for row in rows]
+
+    def find_latest_revisions(
+        self,
+        tournament_id: int | None = None,
+        limit: int = 50,
+    ) -> list[PredictionRevision]:
+        parameters: list[object] = []
+        tournament_filter = ""
+        if tournament_id is not None:
+            tournament_filter = "WHERE m.tournament_id = ?"
+            parameters.append(tournament_id)
+        parameters.append(limit)
+        rows = self.connection.execute(
+            f"""
+            SELECT r.* FROM prediction_revisions r
+            JOIN matches m ON m.id = r.match_id
+            JOIN (
+                SELECT prediction_id, MAX(id) AS revision_id
+                FROM prediction_revisions GROUP BY prediction_id
+            ) latest ON latest.revision_id = r.id
+            {tournament_filter}
+            ORDER BY r.replaced_at DESC, r.id DESC LIMIT ?
+            """,
+            parameters,
+        ).fetchall()
+        return [self._revision_from_row(row) for row in rows]
+
+    def find_view_by_prediction_id(
+        self, prediction_id: int
+    ) -> PredictionView | None:
+        row = self.connection.execute(
+            """
+            SELECT p.*, mv.configuration_json,
+                m.tournament_id, m.round_number,
+                home.name AS home_team_name,
+                away.name AS away_team_name
+            FROM predictions p
+            JOIN model_versions mv ON mv.model_name = p.model_name
+                AND mv.model_version = p.model_version
+            JOIN matches m ON m.id = p.match_id
+            JOIN teams home ON home.id = m.home_team_id
+            JOIN teams away ON away.id = m.away_team_id
+            WHERE p.id = ?
+            """,
+            (prediction_id,),
+        ).fetchone()
+        return self._view_from_row(row) if row is not None else None
+
+    @staticmethod
+    def _view_from_row(row: sqlite3.Row) -> PredictionView:
+        versioned = PredictionRepository._from_row(row)
+        return PredictionView(
+            prediction_id=int(row["id"]),
+            match_id=int(row["match_id"]),
+            tournament_id=int(row["tournament_id"]),
+            round_number=int(row["round_number"]),
+            home_team_name=str(row["home_team_name"]),
+            away_team_name=str(row["away_team_name"]),
+            model_name=str(row["model_name"]),
+            model_version=str(row["model_version"]),
+            prediction=versioned.prediction,
+            confidence=versioned.confidence,
+            explanation=versioned.explanation,
+            created_at=versioned.created_at,
+        )
+
+    @staticmethod
+    def _revision_from_row(row: sqlite3.Row) -> PredictionRevision:
+        snapshot = json.loads(str(row["input_snapshot_json"]))
+        return PredictionRevision(
+            revision_id=int(row["id"]),
+            prediction_id=int(row["prediction_id"]),
+            match_id=int(row["match_id"]),
+            model_name=str(row["model_name"]),
+            model_version=str(row["model_version"]),
+            prediction=Prediction(
+                home_team_id=int(snapshot["home_team"]["team_id"]),
+                away_team_id=int(snapshot["away_team"]["team_id"]),
+                home_probability=float(row["home_probability"]),
+                draw_probability=float(row["draw_probability"]),
+                away_probability=float(row["away_probability"]),
+                predicted_result=PredictedResult(str(row["predicted_result"])),
+            ),
+            confidence=float(row["confidence"]),
+            input_snapshot=snapshot,
+            created_at=str(row["created_at"]),
+            replaced_at=str(row["replaced_at"]),
+        )
 
     def _register_model_version(
         self,

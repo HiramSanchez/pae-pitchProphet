@@ -4,6 +4,9 @@ from src.database.migrations.evaluation_persistence import (
 from src.database.migrations.prediction_persistence import (
     migrate_prediction_persistence_schema,
 )
+from src.database.migrations.prediction_revisions import (
+    migrate_prediction_revisions_schema,
+)
 from src.database.migrations.update_pipeline import (
     migrate_update_pipeline_schema,
 )
@@ -14,6 +17,7 @@ from src.database.migrations.team_statistics import (
 __all__ = [
     "migrate_evaluation_persistence_schema",
     "migrate_prediction_persistence_schema",
+    "migrate_prediction_revisions_schema",
     "migrate_update_pipeline_schema",
     "migrate_team_statistics_schema",
 ]
