@@ -3,7 +3,9 @@ from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager
 
 from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi.middleware.cors import CORSMiddleware
 
+from src.config import FRONTEND_ORIGINS
 from src.api.schemas import (
     QueryRequest,
     QueryResponse,
@@ -43,6 +45,12 @@ def create_app(
     connection_provider: ConnectionProvider = database_connection,
 ) -> FastAPI:
     app = FastAPI(title="PitchProphet", version="1.0.0")
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=list(FRONTEND_ORIGINS),
+        allow_methods=["GET", "POST", "PUT", "PATCH", "OPTIONS"],
+        allow_headers=["Content-Type"],
+    )
 
     def connection_dependency() -> Generator[sqlite3.Connection]:
         with connection_provider() as connection:

@@ -1,5 +1,29 @@
 # Manual de usuario
 
+## Usar la aplicación web
+
+Inicia la API desde la raíz del repositorio:
+
+```powershell
+python -m scripts.run_api --host 127.0.0.1 --port 8000
+```
+
+En otra terminal inicia el cliente:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Abre `http://127.0.0.1:5173`. En **Siguiente jornada** puedes consultar los
+partidos y los pronósticos del modelo. En **Mi quiniela** abre el registro,
+elige local, empate o visitante para cada partido y confirma la jornada cuando
+esté completa. La confirmación bloquea las selecciones para conservar el
+historial. **Resultados** y **Rendimiento** muestran lo ocurrido y comparan tu
+efectividad con los modelos. **Preguntar** acepta únicamente las intenciones
+en español soportadas por el intérprete determinista.
+
 ## Prueba local del pipeline de actualización
 
 Inicializa la base local si todavía no existe:

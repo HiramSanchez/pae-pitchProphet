@@ -8,6 +8,10 @@ BACKUP_DIR = PROJECT_ROOT / "backups"
 
 DATABASE_PATH = DATA_DIR / "liga_mx.db"
 SINGLE_USER_PREDICTOR = "Hiram"
+FRONTEND_ORIGINS = (
+    "http://127.0.0.1:5173",
+    "http://localhost:5173",
+)
 
 DEFAULT_ELO = 1500.0
 HOME_ADVANTAGE_ELO = 65.0

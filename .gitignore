@@ -31,3 +31,7 @@ backups/*.db
 
 # Environment variables
 .env
+
+# Frontend
+frontend/node_modules/
+frontend/dist/

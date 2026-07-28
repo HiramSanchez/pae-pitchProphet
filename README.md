@@ -3,11 +3,10 @@
 PitchProphet is a Python backend for importing football fixtures and results,
 maintaining derived team data, generating reproducible match predictions, and
 comparing model performance over time. It combines a SQLite application with
-command-line workflows and a FastAPI REST interface.
+command-line workflows, a FastAPI REST interface, and a local React web app.
 
-The project currently provides a complete local backend and API. It does not
-include a graphical frontend, a ChatGPT-like chat interface, live commercial
-data feeds, or an LLM integration.
+The deterministic Spanish question interface is not an LLM integration.
+PitchProphet also does not bundle live commercial data feeds.
 
 ## Table of Contents
 
@@ -18,6 +17,7 @@ data feeds, or an LLM integration.
 - [Database setup](#database-setup)
 - [Running the data update pipeline](#running-the-data-update-pipeline)
 - [Running the API](#running-the-api)
+- [Running the web app](#running-the-web-app)
 - [API endpoints](#api-endpoints)
 - [How to use PitchProphet](#how-to-use-pitchprophet)
 - [Understanding prediction output](#understanding-prediction-output)
@@ -50,6 +50,8 @@ data feeds, or an LLM integration.
 - Structured queries for model comparisons, best predictions, draw
   probabilities, model performance, and changed predictions.
 - FastAPI endpoints and a deterministic Spanish question interpreter.
+- A React web app for the next round, personal picks, results, performance,
+  and supported Spanish questions.
 - Bounded operational retries, UTC JSON logs, and `update_runs` auditing.
 
 ## Architecture
@@ -103,6 +105,7 @@ PitchProphet/
 |-- data/                 # Local SQLite database (runtime data)
 |-- docs/                 # User and operational documentation
 |-- examples/             # Valid sample match-source JSON
+|-- frontend/             # React, TypeScript, and Vite web application
 |-- scripts/              # Module-based CLI entry points
 |-- src/
 |   |-- api/              # FastAPI routes and Pydantic request schemas
@@ -122,7 +125,8 @@ PitchProphet/
 
 - Python **3.11 or newer** (`StrEnum` is used by the codebase).
 - Windows PowerShell or Command Prompt for the commands below.
-- No external database server or optional package is required.
+- Node.js **20.19 or newer** and npm are required for the web app.
+- No external database server is required.
 
 After cloning or downloading the repository, open PowerShell in its root and
 run:
@@ -252,8 +256,26 @@ python -m scripts.run_api --host 127.0.0.1 --port 8000
 - OpenAPI JSON: <http://127.0.0.1:8000/openapi.json>
 
 `GET /` currently returns `404 Not Found` because no root route is registered;
-this does not mean the API failed to start. The recommended way to explore and
-execute requests is Swagger UI.
+this does not mean the API failed to start. The web app runs separately.
+
+## Running the web app
+
+Keep the API running at `http://127.0.0.1:8000`. In a second PowerShell
+terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://127.0.0.1:5173>. The five views let you inspect the next round,
+record and finalize a complete personal quiniela, review one round's results,
+compare performance, and ask one of the supported Spanish questions.
+
+The default API URL can be changed by copying `frontend/.env.example` to
+`frontend/.env` and editing `VITE_API_BASE_URL`. The API permits browser
+requests from the local Vite origins `127.0.0.1:5173` and `localhost:5173`.
 
 ## API endpoints
 
@@ -623,10 +645,18 @@ data quality. They are estimates, not guarantees or betting advice.
 
 ## Testing
 
-Run the complete suite from the repository root:
+Run the backend suite from the repository root:
 
 ```powershell
 python -m pytest
+```
+
+Run frontend tests and create a production build:
+
+```powershell
+cd frontend
+npm test
+npm run build
 ```
 
 Useful focused suites include:
@@ -636,9 +666,6 @@ python -m pytest tests/test_api.py
 python -m pytest tests/test_data_update_service.py tests/test_sample_matches.py
 python -m pytest tests/test_prediction_models.py tests/test_backtesting_service.py
 ```
-
-At the time of this README review, the complete suite contains **141 passing
-tests**. This count will naturally change as the project evolves.
 
 ## Automation
 
@@ -724,7 +751,8 @@ network access. The automated command classifies these failures as
 
 - SQLite and local files are intended for a single local deployment, not
   horizontally scaled concurrent workers.
-- No graphical frontend or root web page is included.
+- The web app is a local single-user client; production hosting and
+  authentication are not configured.
 - The question interpreter supports a fixed set of Spanish keyword-based
   intents; it is not general natural-language understanding.
 - No commercial sports provider, authentication, authorization, or API rate
@@ -734,7 +762,7 @@ network access. The automated command classifies these failures as
 
 ### Potential future work
 
-- A separate web or mobile frontend.
+- Production deployment and a mobile-specific client.
 - Authenticated multi-user API access.
 - Remote database/storage and cloud scheduling.
 - Production data-provider adapters with secure credential handling.

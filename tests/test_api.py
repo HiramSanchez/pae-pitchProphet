@@ -21,6 +21,24 @@ def client_with_data() -> tuple[TestClient, sqlite3.Connection]:
     return TestClient(create_app(provider)), connection
 
 
+def test_local_frontend_origin_is_allowed_by_cors() -> None:
+    client, _ = client_with_data()
+
+    response = client.options(
+        "/tournaments/1/rounds/next",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "http://127.0.0.1:5173"
+    )
+
+
 def test_prediction_and_performance_endpoints() -> None:
     client, connection = client_with_data()
     match_id = connection.execute(
