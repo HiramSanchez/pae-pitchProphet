@@ -1,3 +1,5 @@
+import json
+import logging
 import sqlite3
 from datetime import datetime, timezone
 
@@ -30,12 +32,16 @@ class PersonalPredictionService:
         self,
         connection: sqlite3.Connection,
         predictor: str = SINGLE_USER_PREDICTOR,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.connection = connection
         self.predictor = predictor
         self.matches = MatchRepository(connection)
         self.predictions = UserPredictionRepository(connection)
         self.model_predictions = PredictionRepository(connection)
+        self.logger = logger or logging.getLogger(
+            "pitchprophet.personal_predictions"
+        )
 
     def open_round(
         self,
@@ -60,6 +66,9 @@ class PersonalPredictionService:
             journal_round is None
             or journal_round.status != UserPredictionRoundStatus.OPEN
         ):
+            self._log_conflict(
+                "save_picks", tournament_id, round_number
+            )
             raise UserPredictionRoundStateError(
                 "Personal prediction round is not open"
             )
@@ -160,6 +169,9 @@ class PersonalPredictionService:
         except Exception:
             self.connection.execute("ROLLBACK TO finalize_personal_round")
             self.connection.execute("RELEASE finalize_personal_round")
+            self._log_conflict(
+                "finalize_round", tournament_id, round_number
+            )
             raise
 
     def _active_match_ids(
@@ -175,3 +187,22 @@ class PersonalPredictionService:
                 "Tournament round has no active matches"
             )
         return match_ids
+
+    def _log_conflict(
+        self,
+        operation: str,
+        tournament_id: int,
+        round_number: int,
+    ) -> None:
+        self.logger.warning(
+            json.dumps(
+                {
+                    "event": "personal_prediction_conflict",
+                    "operation": operation,
+                    "tournament_id": tournament_id,
+                    "round_number": round_number,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )

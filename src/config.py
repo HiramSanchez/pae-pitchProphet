@@ -8,6 +8,7 @@ BACKUP_DIR = PROJECT_ROOT / "backups"
 
 DATABASE_PATH = DATA_DIR / "liga_mx.db"
 SINGLE_USER_PREDICTOR = "Hiram"
+SQLITE_TIMEOUT_SECONDS = 5.0
 FRONTEND_ORIGINS = (
     "http://127.0.0.1:5173",
     "http://localhost:5173",

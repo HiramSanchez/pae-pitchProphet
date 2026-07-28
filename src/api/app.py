@@ -2,7 +2,7 @@ import sqlite3
 from collections.abc import Callable, Generator
 from contextlib import AbstractContextManager
 
-from fastapi import Depends, FastAPI, HTTPException, Query
+from fastapi import Depends, FastAPI, HTTPException, Query, Response, status
 from fastapi.middleware.cors import CORSMiddleware
 
 from src.config import FRONTEND_ORIGINS
@@ -39,6 +39,13 @@ from src.services.personal_prediction_service import (
 ConnectionProvider = Callable[
     [], AbstractContextManager[sqlite3.Connection]
 ]
+READINESS_TABLES = {
+    "matches",
+    "predictions",
+    "tournaments",
+    "user_prediction_rounds",
+    "user_predictions",
+}
 
 
 def create_app(
@@ -55,6 +62,32 @@ def create_app(
     def connection_dependency() -> Generator[sqlite3.Connection]:
         with connection_provider() as connection:
             yield connection
+
+    @app.get("/health")
+    def health() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/readiness")
+    def readiness(
+        response: Response,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> dict[str, object]:
+        try:
+            connection.execute("SELECT 1").fetchone()
+            tables = {
+                str(row["name"])
+                for row in connection.execute(
+                    "SELECT name FROM sqlite_master WHERE type = 'table'"
+                )
+            }
+            missing = sorted(READINESS_TABLES - tables)
+        except sqlite3.DatabaseError:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"status": "not_ready", "missing_tables": []}
+        if missing:
+            response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
+            return {"status": "not_ready", "missing_tables": missing}
+        return {"status": "ready", "missing_tables": []}
 
     @app.get(
         "/tournaments/{tournament_id}/rounds/next",

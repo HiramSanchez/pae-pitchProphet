@@ -1,3 +1,4 @@
+import logging
 import sqlite3
 from dataclasses import dataclass
 
@@ -22,10 +23,15 @@ class DataUpdateResult:
 
 
 class DataUpdateService:
-    def __init__(self, connection: sqlite3.Connection) -> None:
+    def __init__(
+        self,
+        connection: sqlite3.Connection,
+        logger: logging.Logger | None = None,
+    ) -> None:
         self.connection = connection
         self.matches = MatchRepository(connection)
         self.runs = UpdateRunRepository(connection)
+        self.logger = logger
 
     def run(self, source: MatchDataSource) -> DataUpdateResult:
         run_id = self.runs.start()
@@ -36,7 +42,10 @@ class DataUpdateService:
                 source.name, source.fetch_matches()
             )
             DerivedStateService(self.connection).rebuild()
-            PersonalEvaluationService(self.connection).evaluate(
+            PersonalEvaluationService(
+                self.connection,
+                logger=self.logger,
+            ).evaluate(
                 set(sync.tournament_ids)
             )
             registry = default_model_registry()

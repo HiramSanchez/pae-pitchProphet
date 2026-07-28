@@ -115,6 +115,8 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
 - FastAPI endpoints depend on services through an injected per-request SQLite
   connection. The initial Spanish conversational interpreter is deterministic;
   it selects `QueryService` operations and never calculates probabilities.
+- The optional Phase 18 LLM adapter is deferred technical debt. Do not add a
+  provider, model, SDK, cost, or secret without renewed explicit approval.
 - The deterministic interpreter supports model queries plus next round,
   personal picks, explicit-round results, personal performance, and
   personal-versus-model comparison. Result questions require a parsed round
@@ -123,6 +125,9 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   bounded retries, emits structured UTC JSON logs, and relies on `update_runs`
   for per-attempt audit. Local scheduling uses Windows Task Scheduler; no
   resident daemon is part of the application.
+- SQLite connections enforce foreign keys and a five-second busy timeout.
+  Initialization backs up existing databases before migrations; restores
+  verify integrity and preserve the current database before replacement.
 - The single-user journal currently uses configured predictor `Hiram`.
   `UserPredictionRepository` owns journal persistence, keeps legacy
   `user_predictions.is_final = 1`, and rejects writes unless the related

@@ -1612,6 +1612,12 @@ feat: add PitchProphet web application MVP
 
 # Fase 18 — Adaptador LLM opcional
 
+> **Estado: diferida como deuda técnica opcional.** El 28 de julio de 2026 se
+> decidió continuar a la Fase 19 sin elegir proveedor, modelo, presupuesto ni
+> gestión de secretos. El intérprete determinístico de la Fase 16 permanece
+> como comportamiento de producción. Reactivar esta fase requiere una nueva
+> aprobación explícita de esas cuatro decisiones.
+
 ## Objetivo
 
 Ampliar opcionalmente la interpretación y redacción sin mover cálculos ni datos

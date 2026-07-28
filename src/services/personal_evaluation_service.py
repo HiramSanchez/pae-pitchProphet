@@ -1,3 +1,5 @@
+import json
+import logging
 import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -23,10 +25,14 @@ class PersonalEvaluationService:
         self,
         connection: sqlite3.Connection,
         predictor: str = SINGLE_USER_PREDICTOR,
+        logger: logging.Logger | None = None,
     ) -> None:
         self.matches = MatchRepository(connection)
         self.predictions = UserPredictionRepository(connection)
         self.predictor = predictor
+        self.logger = logger or logging.getLogger(
+            "pitchprophet.personal_evaluation"
+        )
 
     def evaluate(
         self,
@@ -87,11 +93,24 @@ class PersonalEvaluationService:
                     journal_round.round_id, timestamp
                 )
 
-        return PersonalEvaluationResult(
+        result = PersonalEvaluationResult(
             rounds_completed=rounds_completed,
             picks_evaluated=picks_evaluated,
             picks_changed=picks_changed,
         )
+        self.logger.info(
+            json.dumps(
+                {
+                    "event": "personal_evaluation_completed",
+                    "rounds_completed": result.rounds_completed,
+                    "picks_evaluated": result.picks_evaluated,
+                    "picks_changed": result.picks_changed,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            )
+        )
+        return result
 
     @staticmethod
     def _actual_result(match: CompletedMatch) -> PredictedResult:

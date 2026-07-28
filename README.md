@@ -254,6 +254,8 @@ python -m scripts.run_api --host 127.0.0.1 --port 8000
 - API base URL: <http://127.0.0.1:8000>
 - Swagger UI: <http://127.0.0.1:8000/docs>
 - OpenAPI JSON: <http://127.0.0.1:8000/openapi.json>
+- Liveness: <http://127.0.0.1:8000/health>
+- Readiness: <http://127.0.0.1:8000/readiness>
 
 `GET /` currently returns `404 Not Found` because no root route is registered;
 this does not mean the API failed to start. The web app runs separately.
@@ -281,6 +283,8 @@ requests from the local Vite origins `127.0.0.1:5173` and `localhost:5173`.
 
 | Method | Route | Purpose | Required input | Main response | Relevant errors |
 | --- | --- | --- | --- | --- | --- |
+| GET | `/health` | Confirm that the API process is alive. | None. | `{"status":"ok"}`. | None under normal process operation. |
+| GET | `/readiness` | Confirm SQLite access and the minimum v2 schema. | None. | Ready status and missing-table list. | `503` when storage or schema is not ready. |
 | GET | `/tournaments/{tournament_id}/rounds/{round_number}/predictions` | List stored predictions for a round. | Integer path parameters. | Array of prediction views; may be empty. | `422` for malformed path values. |
 | GET | `/matches/{match_id}/predictions` | Compare all stored models for a match. | Integer `match_id`. | Model comparison with predictions, favorites, agreement, and probability ranges. | `404` when no predictions exist; `422` for malformed input. |
 | GET | `/matches/{match_id}/explanation` | Get one model's structured explanation. | Integer `match_id`; optional `model_name` (default `ensemble`) and `model_version` (default `1.0.0`). | Prediction and explanation factors. | `404` when that prediction/explanation does not exist. |
@@ -659,6 +663,26 @@ npm test
 npm run build
 ```
 
+For a production build, copy `.env.production.example` to `.env.production`,
+set the public HTTPS API URL, and run `npm run build`. Serve `frontend/dist`
+with SPA fallback to `index.html`. Add that exact web origin to
+`FRONTEND_ORIGINS`; credentials and wildcard origins are intentionally not
+enabled.
+
+## Backup and recovery
+
+`python -m scripts.initialize_database` creates an integrity-checked backup of
+an existing database before applying idempotent migrations. Manual backups and
+restores are also available:
+
+```powershell
+python -m scripts.backup_database
+python -m scripts.restore_database backups\liga_mx-manual-YYYYMMDDTHHMMSSZ.db
+```
+
+Restore verifies the selected file first and preserves the current database
+as a `before-restore` backup. Stop the API and update commands before restoring.
+
 Useful focused suites include:
 
 ```powershell
@@ -755,6 +779,8 @@ network access. The automated command classifies these failures as
   authentication are not configured.
 - The question interpreter supports a fixed set of Spanish keyword-based
   intents; it is not general natural-language understanding.
+- The optional LLM adapter is deferred technical debt; no provider, model,
+  cost, dependency, or secret is configured.
 - No commercial sports provider, authentication, authorization, or API rate
   limiting is bundled.
 - Scheduling is external through Windows Task Scheduler.

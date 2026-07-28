@@ -39,6 +39,36 @@ def test_local_frontend_origin_is_allowed_by_cors() -> None:
     )
 
 
+def test_health_and_readiness_report_operational_state() -> None:
+    client, _ = client_with_data()
+
+    health = client.get("/health")
+    readiness = client.get("/readiness")
+
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
+    assert readiness.status_code == 200
+    assert readiness.json() == {
+        "status": "ready",
+        "missing_tables": [],
+    }
+
+
+def test_readiness_reports_missing_schema() -> None:
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
+    connection.row_factory = sqlite3.Row
+
+    @contextmanager
+    def provider() -> Iterator[sqlite3.Connection]:
+        yield connection
+
+    response = TestClient(create_app(provider)).get("/readiness")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+    assert "matches" in response.json()["missing_tables"]
+
+
 def test_prediction_and_performance_endpoints() -> None:
     client, connection = client_with_data()
     match_id = connection.execute(

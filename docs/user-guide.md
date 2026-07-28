@@ -24,6 +24,31 @@ historial. **Resultados** y **Rendimiento** muestran lo ocurrido y comparan tu
 efectividad con los modelos. **Preguntar** acepta únicamente las intenciones
 en español soportadas por el intérprete determinista.
 
+### Verificación operativa
+
+`http://127.0.0.1:8000/health` confirma que el proceso está activo.
+`http://127.0.0.1:8000/readiness` además comprueba la conexión SQLite y las
+tablas mínimas de v2. Un `503` de readiness indica que debes inicializar o
+migrar la base.
+
+### Respaldar y restaurar
+
+Detén la API antes de restaurar. Para crear un respaldo manual:
+
+```powershell
+python -m scripts.backup_database
+```
+
+Para restaurarlo:
+
+```powershell
+python -m scripts.restore_database backups\liga_mx-manual-YYYYMMDDTHHMMSSZ.db
+```
+
+La restauración valida el respaldo y conserva automáticamente la base actual
+como otro respaldo `before-restore`. La inicialización también respalda una
+base existente antes de ejecutar migraciones.
+
 ## Prueba local del pipeline de actualización
 
 Inicializa la base local si todavía no existe:

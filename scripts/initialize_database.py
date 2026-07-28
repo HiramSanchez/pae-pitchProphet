@@ -1,4 +1,8 @@
+from pathlib import Path
+
+from src.config import BACKUP_DIR, DATABASE_PATH
 from src.database import database_connection
+from src.database.backup import create_backup
 from src.database.migrations import (
     migrate_evaluation_persistence_schema,
     migrate_prediction_persistence_schema,
@@ -143,8 +147,16 @@ ON elo_history(team_id, round_number);
 """
 
 
-def initialize_database() -> None:
-    with database_connection() as connection:
+def initialize_database(
+    database_path: Path = DATABASE_PATH,
+    backup_dir: Path = BACKUP_DIR,
+) -> None:
+    backup = create_backup(
+        database_path,
+        backup_dir,
+        label="before-migration",
+    )
+    with database_connection(database_path) as connection:
         connection.executescript(SCHEMA)
         migrate_team_statistics_schema(connection)
         migrate_prediction_persistence_schema(connection)
@@ -154,6 +166,8 @@ def initialize_database() -> None:
         migrate_evaluation_persistence_schema(connection)
         migrate_update_pipeline_schema(connection)
 
+    if backup is not None:
+        print(f"Respaldo previo guardado en {backup}")
     print("Base de datos inicializada correctamente.")
 
 
