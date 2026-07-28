@@ -2,6 +2,11 @@ from src.data_sources.manual_source import ManualMatchDataSource
 from src.services.data_update_service import DataUpdateService
 from src.services.query_service import QueryService
 from tests.test_data_update_service import database, matches
+from src.models.prediction import PredictedResult
+from src.models.user_prediction import UserPickSelection
+from src.services.personal_prediction_service import (
+    PersonalPredictionService,
+)
 
 
 def test_query_service_answers_prediction_and_performance_queries() -> None:
@@ -61,3 +66,23 @@ def test_query_service_returns_empty_results_without_data() -> None:
     assert service.compare_models_for_match(999) is None
     assert service.get_best_performing_model(999) is None
     assert service.get_changed_predictions(999) == []
+
+
+def test_query_service_returns_personal_journal_data() -> None:
+    connection = database()
+    DataUpdateService(connection).run(ManualMatchDataSource(matches()))
+    personal = PersonalPredictionService(connection)
+    personal.open_round(1, 2)
+    match_id = connection.execute(
+        "SELECT id FROM matches WHERE status = 'scheduled'"
+    ).fetchone()[0]
+    personal.save_picks(
+        1,
+        2,
+        [UserPickSelection(match_id, PredictedResult.HOME)],
+    )
+
+    service = QueryService(connection)
+
+    assert service.get_personal_prediction_round(1, 2) is not None
+    assert len(service.get_personal_predictions_for_round(1, 2)) == 1

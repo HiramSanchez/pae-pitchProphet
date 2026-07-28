@@ -96,6 +96,34 @@ class UserPredictionRepository:
         ).fetchone()
         return self._prediction_from_row(row) if row is not None else None
 
+    def find_prediction_by_id(
+        self,
+        prediction_id: int,
+        predictor: str,
+    ) -> UserPrediction | None:
+        row = self.connection.execute(
+            """
+            SELECT
+                up.id,
+                up.match_id,
+                m.tournament_id,
+                m.round_number,
+                up.predictor,
+                up.predicted_outcome,
+                up.points_awarded,
+                up.created_at,
+                up.updated_at,
+                up.evaluated_at
+            FROM user_predictions up
+            INNER JOIN matches m ON m.id = up.match_id
+            WHERE up.id = ?
+              AND up.predictor = ?
+              AND up.is_final = 1
+            """,
+            (prediction_id, predictor),
+        ).fetchone()
+        return self._prediction_from_row(row) if row is not None else None
+
     def find_by_round(
         self,
         tournament_id: int,

@@ -112,3 +112,65 @@ def test_update_endpoint_calls_pipeline_with_canonical_matches() -> None:
     assert response.status_code == 200
     assert response.json()["matches_added"] == 1
     assert response.json()["predictions_generated"] == 4
+
+
+def test_personal_journal_api_supports_open_save_finalize_and_get() -> None:
+    client, connection = client_with_data()
+    match_id = connection.execute(
+        "SELECT id FROM matches WHERE status = 'scheduled'"
+    ).fetchone()[0]
+
+    opened = client.post("/tournaments/1/rounds/2/journal")
+    saved = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={
+            "picks": [
+                {
+                    "match_id": match_id,
+                    "predicted_outcome": "home",
+                }
+            ]
+        },
+    )
+    pick_id = saved.json()["picks"][0]["prediction_id"]
+    changed = client.patch(
+        f"/picks/{pick_id}",
+        json={"predicted_outcome": "draw"},
+    )
+    finalized = client.post("/tournaments/1/rounds/2/finalize")
+    retrieved = client.get("/tournaments/1/rounds/2/picks")
+    locked = client.patch(
+        f"/picks/{pick_id}",
+        json={"predicted_outcome": "away"},
+    )
+
+    assert opened.status_code == 200
+    assert opened.json()["journal"]["status"] == "open"
+    assert saved.status_code == 200
+    assert changed.status_code == 200
+    assert changed.json()["predicted_result"] == "DRAW"
+    assert finalized.status_code == 200
+    assert finalized.json()["journal"]["status"] == "finalized"
+    assert retrieved.json()["picks"][0]["predicted_result"] == "DRAW"
+    assert locked.status_code == 409
+
+
+def test_personal_journal_api_reports_incomplete_and_missing_rounds() -> None:
+    client, _ = client_with_data()
+
+    missing = client.post("/tournaments/999/rounds/2/journal")
+    unopened = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={"picks": []},
+    )
+    client.post("/tournaments/1/rounds/2/journal")
+    incomplete = client.post("/tournaments/1/rounds/2/finalize")
+    invalid_outcome = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={"picks": [{"match_id": 1, "predicted_outcome": "win"}]},
+    )
+
+    assert missing.status_code == 404
+    assert unopened.status_code == 409
+    assert incomplete.status_code == 400
+    assert invalid_outcome.status_code == 422

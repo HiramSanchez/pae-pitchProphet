@@ -1,3 +1,5 @@
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from src.models.match import ExternalMatch
@@ -25,3 +27,16 @@ class UpdateResponse(BaseModel):
     matches_added: int
     matches_updated: int
     predictions_generated: int
+
+
+class UserPickRequest(BaseModel):
+    match_id: int = Field(gt=0)
+    predicted_outcome: Literal["home", "draw", "away"]
+
+
+class UserPicksRequest(BaseModel):
+    picks: list[UserPickRequest]
+
+
+class UserPickUpdateRequest(BaseModel):
+    predicted_outcome: Literal["home", "draw", "away"]

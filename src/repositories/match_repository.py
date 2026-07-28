@@ -277,6 +277,24 @@ class MatchRepository:
             else None
         )
 
+    def find_active_match_ids_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[int]:
+        rows = self.connection.execute(
+            """
+            SELECT id
+            FROM matches
+            WHERE tournament_id = ?
+              AND round_number = ?
+              AND status != 'cancelled'
+            ORDER BY id
+            """,
+            (tournament_id, round_number),
+        ).fetchall()
+        return [int(row["id"]) for row in rows]
+
     def _tournament_id(self, match: ExternalMatch) -> int:
         name = self._normalize(match.tournament_name)
         season = self._normalize(match.season)

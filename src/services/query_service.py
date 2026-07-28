@@ -13,6 +13,14 @@ from src.models.query import (
 from src.repositories.evaluation_repository import EvaluationRepository
 from src.repositories.match_repository import MatchRepository
 from src.repositories.prediction_repository import PredictionRepository
+from src.repositories.user_prediction_repository import (
+    UserPredictionRepository,
+)
+from src.config import SINGLE_USER_PREDICTOR
+from src.models.user_prediction import (
+    UserPrediction,
+    UserPredictionRound,
+)
 
 
 class QueryService:
@@ -20,6 +28,7 @@ class QueryService:
         self.matches = MatchRepository(connection)
         self.predictions = PredictionRepository(connection)
         self.evaluations = EvaluationRepository(connection)
+        self.user_predictions = UserPredictionRepository(connection)
 
     def get_best_predictions_for_next_round(
         self, tournament_id: int
@@ -70,6 +79,28 @@ class QueryService:
         self, tournament_id: int
     ) -> list[ModelEvaluation]:
         return self.evaluations.find_latest_for_tournament(tournament_id)
+
+    def get_personal_prediction_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> UserPredictionRound | None:
+        return self.user_predictions.find_round(
+            tournament_id,
+            round_number,
+            SINGLE_USER_PREDICTOR,
+        )
+
+    def get_personal_predictions_for_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[UserPrediction]:
+        return self.user_predictions.find_by_round(
+            tournament_id,
+            round_number,
+            SINGLE_USER_PREDICTOR,
+        )
 
     def get_prediction_explanation(
         self,

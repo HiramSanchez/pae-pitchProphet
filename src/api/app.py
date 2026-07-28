@@ -9,6 +9,8 @@ from src.api.schemas import (
     QueryResponse,
     UpdateRequest,
     UpdateResponse,
+    UserPicksRequest,
+    UserPickUpdateRequest,
 )
 from src.data_sources.manual_source import ManualMatchDataSource
 from src.database import database_connection
@@ -16,6 +18,16 @@ from src.query.interpreter import UnsupportedQueryError
 from src.services.conversation_service import ConversationService
 from src.services.data_update_service import DataUpdateService
 from src.services.query_service import QueryService
+from src.models.prediction import PredictedResult
+from src.models.user_prediction import UserPickSelection
+from src.repositories.user_prediction_repository import (
+    UserPredictionRoundStateError,
+)
+from src.services.personal_prediction_service import (
+    PersonalPredictionService,
+    PredictionRoundNotFoundError,
+    UserPredictionNotFoundError,
+)
 
 
 ConnectionProvider = Callable[
@@ -108,6 +120,117 @@ def create_app(
             message=answer.message,
             data=answer.data,
         )
+
+    @app.post(
+        "/tournaments/{tournament_id}/rounds/{round_number}/journal"
+    )
+    def open_personal_journal(
+        tournament_id: int,
+        round_number: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        try:
+            journal = PersonalPredictionService(connection).open_round(
+                tournament_id, round_number
+            )
+        except PredictionRoundNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+        return {"journal": journal, "picks": []}
+
+    @app.put(
+        "/tournaments/{tournament_id}/rounds/{round_number}/picks"
+    )
+    def save_personal_picks(
+        tournament_id: int,
+        round_number: int,
+        request: UserPicksRequest,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        try:
+            service = PersonalPredictionService(connection)
+            picks = service.save_picks(
+                tournament_id,
+                round_number,
+                [
+                    UserPickSelection(
+                        match_id=item.match_id,
+                        predicted_result=PredictedResult(
+                            item.predicted_outcome.upper()
+                        ),
+                    )
+                    for item in request.picks
+                ],
+            )
+        except PredictionRoundNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+        except UserPredictionRoundStateError as error:
+            raise HTTPException(409, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        journal = QueryService(
+            connection
+        ).get_personal_prediction_round(tournament_id, round_number)
+        return {"journal": journal, "picks": picks}
+
+    @app.patch("/picks/{prediction_id}")
+    def update_personal_pick(
+        prediction_id: int,
+        request: UserPickUpdateRequest,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        try:
+            return PersonalPredictionService(connection).update_pick(
+                prediction_id,
+                PredictedResult(request.predicted_outcome.upper()),
+            )
+        except UserPredictionNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+        except UserPredictionRoundStateError as error:
+            raise HTTPException(409, str(error)) from error
+
+    @app.post(
+        "/tournaments/{tournament_id}/rounds/{round_number}/finalize"
+    )
+    def finalize_personal_journal(
+        tournament_id: int,
+        round_number: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        try:
+            journal = PersonalPredictionService(connection).finalize_round(
+                tournament_id, round_number
+            )
+        except PredictionRoundNotFoundError as error:
+            raise HTTPException(404, str(error)) from error
+        except UserPredictionRoundStateError as error:
+            raise HTTPException(409, str(error)) from error
+        except ValueError as error:
+            raise HTTPException(400, str(error)) from error
+        picks = QueryService(
+            connection
+        ).get_personal_predictions_for_round(tournament_id, round_number)
+        return {"journal": journal, "picks": picks}
+
+    @app.get(
+        "/tournaments/{tournament_id}/rounds/{round_number}/picks"
+    )
+    def get_personal_picks(
+        tournament_id: int,
+        round_number: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        query = QueryService(connection)
+        journal = query.get_personal_prediction_round(
+            tournament_id, round_number
+        )
+        if journal is None:
+            raise HTTPException(404, "Personal prediction round was not found")
+        return {
+            "journal": journal,
+            "picks": query.get_personal_predictions_for_round(
+                tournament_id, round_number
+            ),
+        }
 
     return app
 

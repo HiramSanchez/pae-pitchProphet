@@ -36,3 +36,9 @@ class UserPrediction:
     created_at: str
     updated_at: str
     evaluated_at: str | None
+
+
+@dataclass(frozen=True)
+class UserPickSelection:
+    match_id: int
+    predicted_result: PredictedResult
