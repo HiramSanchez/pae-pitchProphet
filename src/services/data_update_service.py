@@ -8,6 +8,9 @@ from src.repositories.update_run_repository import UpdateRunRepository
 from src.services.elo_processing_service import DerivedStateService
 from src.services.evaluation_history_service import EvaluationHistoryService
 from src.services.prediction_service import PredictionService
+from src.services.personal_evaluation_service import (
+    PersonalEvaluationService,
+)
 
 
 @dataclass(frozen=True)
@@ -33,6 +36,9 @@ class DataUpdateService:
                 source.name, source.fetch_matches()
             )
             DerivedStateService(self.connection).rebuild()
+            PersonalEvaluationService(self.connection).evaluate(
+                set(sync.tournament_ids)
+            )
             registry = default_model_registry()
             prediction_count_before = int(
                 self.connection.execute(

@@ -295,6 +295,28 @@ class MatchRepository:
         ).fetchall()
         return [int(row["id"]) for row in rows]
 
+    def count_pending_results_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS pending
+            FROM matches
+            WHERE tournament_id = ?
+              AND round_number = ?
+              AND status != 'cancelled'
+              AND (
+                  status != 'completed'
+                  OR home_goals IS NULL
+                  OR away_goals IS NULL
+              )
+            """,
+            (tournament_id, round_number),
+        ).fetchone()
+        return int(row["pending"])
+
     def _tournament_id(self, match: ExternalMatch) -> int:
         name = self._normalize(match.tournament_name)
         season = self._normalize(match.season)

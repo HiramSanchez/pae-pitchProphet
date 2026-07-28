@@ -155,6 +155,84 @@ class UserPredictionRepository:
         ).fetchall()
         return [self._prediction_from_row(row) for row in rows]
 
+    def find_rounds_for_evaluation(
+        self,
+        predictor: str,
+        tournament_ids: set[int] | None = None,
+    ) -> list[UserPredictionRound]:
+        parameters: list[object] = [predictor]
+        tournament_filter = ""
+        if tournament_ids is not None:
+            if not tournament_ids:
+                return []
+            placeholders = ",".join("?" for _ in tournament_ids)
+            tournament_filter = (
+                f" AND tournament_id IN ({placeholders})"
+            )
+            parameters.extend(sorted(tournament_ids))
+        rows = self.connection.execute(
+            f"""
+            SELECT *
+            FROM user_prediction_rounds
+            WHERE predictor = ?
+              AND status IN ('finalized', 'evaluated')
+              {tournament_filter}
+            ORDER BY tournament_id, round_number, id
+            """,
+            parameters,
+        ).fetchall()
+        return [self._round_from_row(row) for row in rows]
+
+    def set_prediction_evaluation(
+        self,
+        prediction_id: int,
+        points_awarded: int,
+        evaluated_at: str,
+    ) -> bool:
+        if points_awarded not in {0, 1}:
+            raise ValueError("points_awarded must be zero or one")
+        current = self.connection.execute(
+            """
+            SELECT points_awarded, evaluated_at
+            FROM user_predictions
+            WHERE id = ?
+            """,
+            (prediction_id,),
+        ).fetchone()
+        if current is None:
+            raise ValueError("Personal prediction was not found")
+        if (
+            current["points_awarded"] == points_awarded
+            and current["evaluated_at"] is not None
+        ):
+            return False
+        self.connection.execute(
+            """
+            UPDATE user_predictions
+            SET points_awarded = ?, evaluated_at = ?
+            WHERE id = ?
+            """,
+            (points_awarded, evaluated_at, prediction_id),
+        )
+        return True
+
+    def mark_round_evaluated(
+        self,
+        round_id: int,
+        evaluated_at: str,
+    ) -> bool:
+        cursor = self.connection.execute(
+            """
+            UPDATE user_prediction_rounds
+            SET status = 'evaluated',
+                evaluated_at = ?,
+                updated_at = ?
+            WHERE id = ? AND status = 'finalized'
+            """,
+            (evaluated_at, evaluated_at, round_id),
+        )
+        return cursor.rowcount == 1
+
     def save_open_prediction(
         self,
         tournament_id: int,

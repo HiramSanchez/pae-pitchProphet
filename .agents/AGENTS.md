@@ -117,6 +117,11 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   `UserPredictionRepository` owns journal persistence, keeps legacy
   `user_predictions.is_final = 1`, and rejects writes unless the related
   `user_prediction_rounds` row is `open`.
+- `PersonalEvaluationService` runs after derived-state rebuilding in the
+  update pipeline. It scores completed personal picks as categorical 0/1,
+  reevaluates corrected results idempotently, leaves postponed matches
+  pending, and marks a finalized journal round evaluated only when every
+  non-cancelled match has a complete result.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 

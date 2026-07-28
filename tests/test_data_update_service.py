@@ -14,6 +14,11 @@ from src.database.migrations import (
 )
 from src.models.match import ExternalMatch
 from src.services.data_update_service import DataUpdateService
+from src.models.prediction import PredictedResult
+from src.models.user_prediction import UserPickSelection
+from src.services.personal_prediction_service import (
+    PersonalPredictionService,
+)
 
 
 def database() -> sqlite3.Connection:
@@ -165,3 +170,56 @@ def test_failure_after_sync_rolls_back_matches_and_keeps_audit() -> None:
     row = connection.execute("SELECT * FROM update_runs").fetchone()
     assert row["status"] == "failed"
     assert row["finished_at"] is not None
+
+
+def test_pipeline_evaluates_finalized_personal_round() -> None:
+    connection = database()
+    updater = DataUpdateService(connection)
+    scheduled = ExternalMatch(
+        "journal-match",
+        "Liga MX",
+        "2026",
+        1,
+        "A",
+        "B",
+        "scheduled",
+    )
+    updater.run(ManualMatchDataSource([scheduled], "journal"))
+    match_id = connection.execute(
+        "SELECT id FROM matches WHERE status = 'scheduled'"
+    ).fetchone()[0]
+    personal = PersonalPredictionService(connection)
+    personal.open_round(1, 1)
+    personal.save_picks(
+        1,
+        1,
+        [UserPickSelection(match_id, PredictedResult.HOME)],
+    )
+    personal.finalize_round(1, 1)
+
+    result = updater.run(
+        ManualMatchDataSource(
+            [
+                ExternalMatch(
+                    "journal-match",
+                    "Liga MX",
+                    "2026",
+                    1,
+                    "A",
+                    "B",
+                    "completed",
+                    home_goals=2,
+                    away_goals=0,
+                )
+            ],
+            "journal",
+        )
+    )
+
+    assert result.matches_updated == 1
+    assert connection.execute(
+        "SELECT points_awarded FROM user_predictions"
+    ).fetchone()[0] == 1
+    assert connection.execute(
+        "SELECT status FROM user_prediction_rounds"
+    ).fetchone()[0] == "evaluated"
