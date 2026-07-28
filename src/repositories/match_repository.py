@@ -227,6 +227,8 @@ class MatchRepository:
                 updated += self._update_match_if_changed(
                     match_id, external, tournament_id, home_id, away_id
                 )
+        for tournament_id in tournament_ids:
+            self._refresh_current_round(tournament_id)
         return MatchSyncResult(added, updated, frozenset(tournament_ids))
 
     def _update_match_if_changed(
@@ -295,15 +297,31 @@ class MatchRepository:
                 (name, season, match.round_number),
             )
             return int(cursor.lastrowid)
-        tournament_id = int(row["id"])
+        return int(row["id"])
+
+    def _refresh_current_round(self, tournament_id: int) -> None:
         self.connection.execute(
             """
-            UPDATE tournaments SET current_round = MAX(current_round, ?)
+            UPDATE tournaments
+            SET current_round = COALESCE(
+                (
+                    SELECT MIN(round_number)
+                    FROM matches
+                    WHERE tournament_id = tournaments.id
+                      AND status = 'scheduled'
+                ),
+                (
+                    SELECT MAX(round_number)
+                    FROM matches
+                    WHERE tournament_id = tournaments.id
+                      AND status = 'completed'
+                ),
+                1
+            )
             WHERE id = ?
             """,
-            (match.round_number, tournament_id),
+            (tournament_id,),
         )
-        return tournament_id
 
     def _team_id(self, raw_name: str) -> int:
         name = self._normalize(raw_name)
