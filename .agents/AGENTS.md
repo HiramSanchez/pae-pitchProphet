@@ -115,6 +115,10 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
 - FastAPI endpoints depend on services through an injected per-request SQLite
   connection. The initial Spanish conversational interpreter is deterministic;
   it selects `QueryService` operations and never calculates probabilities.
+- The deterministic interpreter supports model queries plus next round,
+  personal picks, explicit-round results, personal performance, and
+  personal-versus-model comparison. Result questions require a parsed round
+  number; personal-pick questions without one use the latest journal.
 - Operational automation wraps the complete idempotent update pipeline in
   bounded retries, emits structured UTC JSON logs, and relies on `update_runs`
   for per-attempt audit. Local scheduling uses Windows Task Scheduler; no

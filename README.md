@@ -588,8 +588,18 @@ show the valid empty result.
    guaranteed outcome.
 
 PitchProphet is currently a backend/API. The `/queries` endpoint recognizes a
-small deterministic set of Spanish intents; it is not a general-purpose chat
-or LLM interface.
+deterministic set of Spanish intents; it is not a general-purpose chat or LLM
+interface. Besides model predictions, draws, changes, performance, and
+match-level comparison, it recognizes:
+
+- `¿Cuál es la siguiente jornada?`
+- `¿Cuáles fueron mis pronósticos?`
+- `¿Cómo me fue en la jornada 8?`
+- `¿Cuál es mi efectividad?`
+- `¿Cómo voy contra los modelos?`
+
+Questions about round results must include the round number. Personal-pick
+questions without one return the latest personal journal.
 
 ## Understanding prediction output
 

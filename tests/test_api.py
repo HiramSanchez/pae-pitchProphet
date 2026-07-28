@@ -79,6 +79,52 @@ def test_primary_spanish_query_returns_required_prediction_context() -> None:
     assert view["explanation"]["uncertainty"]
 
 
+def test_product_questions_return_structured_spanish_answers() -> None:
+    client, _ = client_with_data()
+    requests = [
+        ("¿Cuál es la siguiente jornada?", "next_round"),
+        ("¿Cuáles fueron mis pronósticos?", "personal_picks"),
+        ("¿Cómo me fue en la jornada 1?", "round_results"),
+        ("¿Cuál es mi efectividad?", "personal_performance"),
+        (
+            "¿Cómo voy contra los modelos?",
+            "personal_model_comparison",
+        ),
+    ]
+
+    responses = [
+        client.post(
+            "/queries",
+            json={"question": question, "tournament_id": 1},
+        )
+        for question, _ in requests
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert [
+        response.json()["intent"] for response in responses
+    ] == [intent for _, intent in requests]
+    assert responses[0].json()["data"]["round_number"] == 2
+    assert responses[1].json()["data"]["journal"] is None
+    assert responses[2].json()["data"]["round_number"] == 1
+    assert responses[3].json()["data"]["evaluated_matches"] == 0
+    assert responses[4].json()["data"]["participants"] == []
+
+
+def test_round_results_question_requires_round_context() -> None:
+    client, _ = client_with_data()
+
+    response = client.post(
+        "/queries",
+        json={
+            "question": "¿Cuáles son los resultados de la jornada?",
+            "tournament_id": 1,
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_query_validation_and_missing_resources_are_http_errors() -> None:
     client, _ = client_with_data()
 

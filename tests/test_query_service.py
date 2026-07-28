@@ -128,6 +128,10 @@ def test_query_service_returns_personal_journal_data() -> None:
 
     assert service.get_personal_prediction_round(1, 2) is not None
     assert len(service.get_personal_predictions_for_round(1, 2)) == 1
+    latest = service.get_latest_personal_journal(1)
+    assert latest.journal is not None
+    assert latest.journal.round_number == 2
+    assert len(latest.picks) == 1
 
 
 def test_personal_model_comparison_uses_frozen_common_predictions() -> None:

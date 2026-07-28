@@ -45,3 +45,9 @@ class RoundResults:
     round_number: int
     journal: UserPredictionRound | None
     matches: tuple[RoundResult, ...]
+
+
+@dataclass(frozen=True)
+class PersonalJournal:
+    journal: UserPredictionRound | None
+    picks: tuple[UserPrediction, ...]

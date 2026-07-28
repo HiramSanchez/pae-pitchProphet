@@ -37,6 +37,24 @@ class UserPredictionRepository:
         ).fetchone()
         return self._round_from_row(row) if row is not None else None
 
+    def find_latest_round(
+        self,
+        tournament_id: int,
+        predictor: str,
+    ) -> UserPredictionRound | None:
+        row = self.connection.execute(
+            """
+            SELECT *
+            FROM user_prediction_rounds
+            WHERE tournament_id = ?
+              AND predictor = ?
+            ORDER BY round_number DESC, id DESC
+            LIMIT 1
+            """,
+            (tournament_id, predictor),
+        ).fetchone()
+        return self._round_from_row(row) if row is not None else None
+
     def open_round(
         self,
         tournament_id: int,

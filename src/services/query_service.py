@@ -5,6 +5,7 @@ from src.models.evaluation import ModelEvaluation
 from src.models.prediction import PredictedResult
 from src.models.product import (
     NextRound,
+    PersonalJournal,
     ProductMatch,
     RoundResult,
     RoundResults,
@@ -197,6 +198,26 @@ class QueryService:
             tournament_id,
             round_number,
             SINGLE_USER_PREDICTOR,
+        )
+
+    def get_latest_personal_journal(
+        self,
+        tournament_id: int,
+    ) -> PersonalJournal:
+        journal = self.user_predictions.find_latest_round(
+            tournament_id, SINGLE_USER_PREDICTOR
+        )
+        if journal is None:
+            return PersonalJournal(None, ())
+        return PersonalJournal(
+            journal=journal,
+            picks=tuple(
+                self.user_predictions.find_by_round(
+                    tournament_id,
+                    journal.round_number,
+                    SINGLE_USER_PREDICTOR,
+                )
+            ),
         )
 
     def get_personal_performance(

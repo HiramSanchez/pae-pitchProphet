@@ -140,3 +140,22 @@ Una respuesta de rendimiento con cero partidos evaluados es válida. La
 comparación utiliza los pronósticos de modelo congelados al finalizar la
 quiniela y solo incluye modelos representados en todos los partidos
 comparados.
+
+## Preguntas determinísticas en español
+
+`POST /queries` también acepta preguntas de producto:
+
+```text
+¿Cuál es la siguiente jornada?
+¿Cuáles fueron mis pronósticos?
+¿Cómo me fue en la jornada 8?
+¿Cuál es mi efectividad?
+¿Cómo voy contra los modelos?
+```
+
+El intérprete normaliza mayúsculas y acentos, selecciona una operación de
+`QueryService` y devuelve un mensaje en español junto con datos estructurados.
+No utiliza un LLM, no ejecuta SQL arbitrario y no calcula predicciones. Para
+consultar resultados se debe indicar explícitamente el número de jornada; si
+una pregunta sobre pronósticos personales no indica jornada, se devuelve la
+quiniela personal más reciente.
