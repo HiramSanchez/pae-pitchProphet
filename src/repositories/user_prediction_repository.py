@@ -333,7 +333,6 @@ class UserPredictionRepository:
               AND up.predictor = ?
               AND up.is_final = 1
               AND up.points_awarded IS NOT NULL
-              AND up.evaluated_at IS NOT NULL
             ORDER BY m.round_number, up.match_id
             """,
             (tournament_id, predictor),

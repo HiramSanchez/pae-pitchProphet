@@ -104,6 +104,11 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   failed functional changes are rolled back.
 - `QueryService` is the structured read boundary for API/conversation. It
   returns domain dataclasses, never SQLite rows or presentation text.
+- Product reads compose the next scheduled round, optional journal, personal
+  picks, persisted model predictions, round results, and performance without
+  recalculation. Legacy picks with `points_awarded` count toward personal
+  performance even without `evaluated_at`; model comparison excludes picks
+  without frozen snapshots so every participant uses the same match set.
 - Scheduled prediction updates archive immutable revisions only when the input
   snapshot changes. Completed predictions are immutable; changed-prediction
   queries compare the latest archived revision with current persisted state.

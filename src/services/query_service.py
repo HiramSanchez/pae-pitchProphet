@@ -3,6 +3,12 @@ from collections import defaultdict
 
 from src.models.evaluation import ModelEvaluation
 from src.models.prediction import PredictedResult
+from src.models.product import (
+    NextRound,
+    ProductMatch,
+    RoundResult,
+    RoundResults,
+)
 from src.models.query import (
     BestPrediction,
     ModelComparison,
@@ -96,6 +102,92 @@ class QueryService:
             SINGLE_USER_PREDICTOR,
         )
 
+    def get_next_round(
+        self,
+        tournament_id: int,
+    ) -> NextRound | None:
+        round_number = self.matches.find_next_scheduled_round(tournament_id)
+        if round_number is None:
+            return None
+        matches = self.matches.find_by_round(tournament_id, round_number)
+        predictions_by_match: dict[int, list[PredictionView]] = defaultdict(
+            list
+        )
+        for prediction in self.predictions.find_views_by_round(
+            tournament_id, round_number
+        ):
+            predictions_by_match[prediction.match_id].append(prediction)
+        personal_by_match = {
+            item.match_id: item
+            for item in self.user_predictions.find_by_round(
+                tournament_id,
+                round_number,
+                SINGLE_USER_PREDICTOR,
+            )
+        }
+        return NextRound(
+            tournament_id=tournament_id,
+            round_number=round_number,
+            journal=self.get_personal_prediction_round(
+                tournament_id, round_number
+            ),
+            matches=tuple(
+                ProductMatch(
+                    match_id=match.match_id,
+                    home_team_name=match.home_team_name,
+                    away_team_name=match.away_team_name,
+                    status=match.status,
+                    match_date=match.match_date,
+                    personal_pick=personal_by_match.get(match.match_id),
+                    predictions=tuple(
+                        predictions_by_match[match.match_id]
+                    ),
+                )
+                for match in matches
+            ),
+        )
+
+    def get_round_results(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> RoundResults | None:
+        matches = self.matches.find_by_round(tournament_id, round_number)
+        if not matches:
+            return None
+        personal_by_match = {
+            item.match_id: item
+            for item in self.user_predictions.find_by_round(
+                tournament_id,
+                round_number,
+                SINGLE_USER_PREDICTOR,
+            )
+        }
+        return RoundResults(
+            tournament_id=tournament_id,
+            round_number=round_number,
+            journal=self.get_personal_prediction_round(
+                tournament_id, round_number
+            ),
+            matches=tuple(
+                RoundResult(
+                    match_id=match.match_id,
+                    home_team_name=match.home_team_name,
+                    away_team_name=match.away_team_name,
+                    status=match.status,
+                    home_goals=match.home_goals,
+                    away_goals=match.away_goals,
+                    actual_result=self._actual_result(
+                        match.home_goals,
+                        match.away_goals,
+                        match.status,
+                    ),
+                    personal_pick=personal_by_match.get(match.match_id),
+                )
+                for match in matches
+            ),
+        )
+
     def get_personal_predictions_for_round(
         self,
         tournament_id: int,
@@ -145,9 +237,16 @@ class QueryService:
             snapshots_by_pick[snapshot.user_prediction_id][
                 (snapshot.model_name, snapshot.model_version)
             ] = snapshot
+        comparable = [
+            item
+            for item in personal
+            if snapshots_by_pick[item.prediction_id]
+        ]
+        if not comparable:
+            return PersonalModelComparison(tournament_id, 0, ())
         identity_sets = [
             set(snapshots_by_pick[item.prediction_id])
-            for item in personal
+            for item in comparable
         ]
         common_identities = (
             set.intersection(*identity_sets) if identity_sets else set()
@@ -161,16 +260,18 @@ class QueryService:
         participants = [
             PerformanceParticipant(
                 name="personal",
-                correct=sum(item.points_awarded or 0 for item in personal),
+                correct=sum(
+                    item.points_awarded or 0 for item in comparable
+                ),
                 accuracy=sum(
-                    item.points_awarded or 0 for item in personal
+                    item.points_awarded or 0 for item in comparable
                 )
-                / len(personal),
+                / len(comparable),
             )
         ]
         for model_name, model_version in sorted(common_identities):
             correct = 0
-            for item in personal:
+            for item in comparable:
                 match = completed[item.match_id]
                 snapshot = snapshots_by_pick[item.prediction_id][
                     (model_name, model_version)
@@ -187,12 +288,12 @@ class QueryService:
                 PerformanceParticipant(
                     name=f"{model_name}:{model_version}",
                     correct=correct,
-                    accuracy=correct / len(personal),
+                    accuracy=correct / len(comparable),
                 )
             )
         return PersonalModelComparison(
             tournament_id=tournament_id,
-            evaluated_matches=len(personal),
+            evaluated_matches=len(comparable),
             participants=tuple(participants),
         )
 
@@ -379,3 +480,21 @@ class QueryService:
             "draw": prediction.draw_probability,
             "away": prediction.away_probability,
         }[result]
+
+    @staticmethod
+    def _actual_result(
+        home_goals: int | None,
+        away_goals: int | None,
+        status: str,
+    ) -> PredictedResult | None:
+        if (
+            status != "completed"
+            or home_goals is None
+            or away_goals is None
+        ):
+            return None
+        if home_goals > away_goals:
+            return PredictedResult.HOME
+        if home_goals < away_goals:
+            return PredictedResult.AWAY
+        return PredictedResult.DRAW

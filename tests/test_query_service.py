@@ -22,6 +22,8 @@ def test_query_service_answers_prediction_and_performance_queries() -> None:
         best[0].prediction.match_id, "ensemble", "1.0.0"
     )
     best_model = service.get_best_performing_model(1)
+    next_round = service.get_next_round(1)
+    results = service.get_round_results(1, 1)
 
     assert len(best) == 1
     assert best[0].prediction.model_name == "ensemble"
@@ -36,6 +38,12 @@ def test_query_service_answers_prediction_and_performance_queries() -> None:
     assert explanation is not None
     assert explanation.explanation["main_factors"]
     assert best_model is not None
+    assert next_round is not None
+    assert next_round.round_number == 2
+    assert len(next_round.matches) == 1
+    assert len(next_round.matches[0].predictions) == 4
+    assert results is not None
+    assert results.matches[0].actual_result == PredictedResult.HOME
 
 
 def test_changed_predictions_compare_latest_revision_without_recalculation() -> None:
@@ -67,6 +75,39 @@ def test_query_service_returns_empty_results_without_data() -> None:
     assert service.compare_models_for_match(999) is None
     assert service.get_best_performing_model(999) is None
     assert service.get_changed_predictions(999) == []
+    assert service.get_next_round(999) is None
+    assert service.get_round_results(999, 1) is None
+
+
+def test_personal_performance_includes_legacy_scored_pick() -> None:
+    connection = database()
+    connection.executescript(
+        """
+        INSERT INTO tournaments (id, name, season)
+        VALUES (1, 'Liga MX', 'Apertura 2026');
+        INSERT INTO teams (id, name) VALUES (1, 'A');
+        INSERT INTO teams (id, name) VALUES (2, 'B');
+        INSERT INTO matches (
+            id, tournament_id, round_number, home_team_id,
+            away_team_id, home_goals, away_goals, status
+        ) VALUES (1, 1, 1, 1, 2, 2, 0, 'completed');
+        INSERT INTO user_predictions (
+            match_id, predictor, predicted_outcome, is_final,
+            points_awarded, created_at, updated_at, evaluated_at
+        ) VALUES (
+            1, 'Hiram', 'home', 1, 1,
+            '2026-07-21T12:00:00+00:00',
+            '2026-07-21T12:00:00+00:00',
+            NULL
+        );
+        """
+    )
+
+    performance = QueryService(connection).get_personal_performance(1)
+
+    assert performance.evaluated_matches == 1
+    assert performance.correct == 1
+    assert performance.accuracy == 1.0
 
 
 def test_query_service_returns_personal_journal_data() -> None:

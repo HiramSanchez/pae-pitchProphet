@@ -7,6 +7,10 @@ from fastapi import Depends, FastAPI, HTTPException, Query
 from src.api.schemas import (
     QueryRequest,
     QueryResponse,
+    NextRoundResponse,
+    PersonalModelComparisonResponse,
+    PersonalPerformanceResponse,
+    RoundResultsResponse,
     UpdateRequest,
     UpdateResponse,
     UserPicksRequest,
@@ -43,6 +47,19 @@ def create_app(
     def connection_dependency() -> Generator[sqlite3.Connection]:
         with connection_provider() as connection:
             yield connection
+
+    @app.get(
+        "/tournaments/{tournament_id}/rounds/next",
+        response_model=NextRoundResponse,
+    )
+    def next_round(
+        tournament_id: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        result = QueryService(connection).get_next_round(tournament_id)
+        if result is None:
+            raise HTTPException(404, "Next scheduled round was not found")
+        return result
 
     @app.get("/tournaments/{tournament_id}/rounds/{round_number}/predictions")
     def round_predictions(
@@ -84,6 +101,46 @@ def create_app(
         connection: sqlite3.Connection = Depends(connection_dependency),
     ) -> object:
         return QueryService(connection).get_model_performance(tournament_id)
+
+    @app.get(
+        "/tournaments/{tournament_id}/rounds/{round_number}/results",
+        response_model=RoundResultsResponse,
+    )
+    def round_results(
+        tournament_id: int,
+        round_number: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        result = QueryService(connection).get_round_results(
+            tournament_id, round_number
+        )
+        if result is None:
+            raise HTTPException(404, "Tournament round was not found")
+        return result
+
+    @app.get(
+        "/tournaments/{tournament_id}/performance/personal",
+        response_model=PersonalPerformanceResponse,
+    )
+    def personal_performance(
+        tournament_id: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        return QueryService(connection).get_personal_performance(
+            tournament_id
+        )
+
+    @app.get(
+        "/tournaments/{tournament_id}/performance/comparison",
+        response_model=PersonalModelComparisonResponse,
+    )
+    def personal_model_comparison(
+        tournament_id: int,
+        connection: sqlite3.Connection = Depends(connection_dependency),
+    ) -> object:
+        return QueryService(connection).compare_personal_performance(
+            tournament_id
+        )
 
     @app.post("/updates/run", response_model=UpdateResponse)
     def run_update(

@@ -31,6 +31,10 @@ def test_prediction_and_performance_endpoints() -> None:
     match_response = client.get(f"/matches/{match_id}/predictions")
     explanation = client.get(f"/matches/{match_id}/explanation")
     performance = client.get("/models/performance?tournament_id=1")
+    next_round = client.get("/tournaments/1/rounds/next")
+    results = client.get("/tournaments/1/rounds/1/results")
+    personal = client.get("/tournaments/1/performance/personal")
+    comparison = client.get("/tournaments/1/performance/comparison")
 
     assert round_response.status_code == 200
     assert len(round_response.json()) == 4
@@ -40,6 +44,13 @@ def test_prediction_and_performance_endpoints() -> None:
     assert explanation.json()["prediction"]["model_name"] == "ensemble"
     assert performance.status_code == 200
     assert len(performance.json()) == 4
+    assert next_round.status_code == 200
+    assert next_round.json()["round_number"] == 2
+    assert len(next_round.json()["matches"][0]["predictions"]) == 4
+    assert results.status_code == 200
+    assert results.json()["matches"][0]["actual_result"] == "HOME"
+    assert personal.json()["evaluated_matches"] == 0
+    assert comparison.json()["participants"] == []
 
 
 def test_primary_spanish_query_returns_required_prediction_context() -> None:
@@ -77,10 +88,14 @@ def test_query_validation_and_missing_resources_are_http_errors() -> None:
     )
     missing = client.get("/matches/999/predictions")
     invalid = client.get("/models/performance?tournament_id=0")
+    missing_round = client.get("/tournaments/999/rounds/next")
+    missing_results = client.get("/tournaments/1/rounds/999/results")
 
     assert unknown.status_code == 422
     assert missing.status_code == 404
     assert invalid.status_code == 422
+    assert missing_round.status_code == 404
+    assert missing_results.status_code == 404
 
 
 def test_update_endpoint_calls_pipeline_with_canonical_matches() -> None:

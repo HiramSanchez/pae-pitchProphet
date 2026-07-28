@@ -115,3 +115,28 @@ with sqlite3.connect(uri, uri=True) as connection:
 Verifica que el último `update_runs` tenga estado `succeeded`, que existan los
 cuatro partidos sin duplicados, evaluaciones de los cuatro modelos y cuatro
 predicciones por cada partido que siga programado.
+
+## Consultas orientadas al producto
+
+Con el API iniciado, la vista completa de la siguiente jornada se obtiene con:
+
+```http
+GET /tournaments/1/rounds/next
+```
+
+La respuesta agrupa los cruces, el estado de cada partido, su fecha opcional,
+la quiniela personal si existe y las predicciones persistidas de los modelos.
+No recalcula predicciones durante la consulta.
+
+Los resultados y el rendimiento se consultan con:
+
+```http
+GET /tournaments/1/rounds/1/results
+GET /tournaments/1/performance/personal
+GET /tournaments/1/performance/comparison
+```
+
+Una respuesta de rendimiento con cero partidos evaluados es válida. La
+comparación utiliza los pronósticos de modelo congelados al finalizar la
+quiniela y solo incluye modelos representados en todos los partidos
+comparados.

@@ -2,7 +2,12 @@ import sqlite3
 from dataclasses import dataclass
 
 from src.config import DEFAULT_ELO
-from src.models.match import CompletedMatch, ExternalMatch, ScheduledMatch
+from src.models.match import (
+    CompletedMatch,
+    ExternalMatch,
+    RoundMatch,
+    ScheduledMatch,
+)
 
 
 @dataclass(frozen=True)
@@ -294,6 +299,63 @@ class MatchRepository:
             (tournament_id, round_number),
         ).fetchall()
         return [int(row["id"]) for row in rows]
+
+    def find_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[RoundMatch]:
+        rows = self.connection.execute(
+            """
+            SELECT
+                m.id AS match_id,
+                m.tournament_id,
+                m.round_number,
+                m.home_team_id,
+                home.name AS home_team_name,
+                m.away_team_id,
+                away.name AS away_team_name,
+                m.status,
+                m.match_date,
+                m.home_goals,
+                m.away_goals
+            FROM matches m
+            INNER JOIN teams home ON home.id = m.home_team_id
+            INNER JOIN teams away ON away.id = m.away_team_id
+            WHERE m.tournament_id = ?
+              AND m.round_number = ?
+            ORDER BY m.id
+            """,
+            (tournament_id, round_number),
+        ).fetchall()
+        return [
+            RoundMatch(
+                match_id=int(row["match_id"]),
+                tournament_id=int(row["tournament_id"]),
+                round_number=int(row["round_number"]),
+                home_team_id=int(row["home_team_id"]),
+                home_team_name=str(row["home_team_name"]),
+                away_team_id=int(row["away_team_id"]),
+                away_team_name=str(row["away_team_name"]),
+                status=str(row["status"]),
+                match_date=(
+                    str(row["match_date"])
+                    if row["match_date"] is not None
+                    else None
+                ),
+                home_goals=(
+                    int(row["home_goals"])
+                    if row["home_goals"] is not None
+                    else None
+                ),
+                away_goals=(
+                    int(row["away_goals"])
+                    if row["away_goals"] is not None
+                    else None
+                ),
+            )
+            for row in rows
+        ]
 
     def count_pending_results_by_round(
         self,
