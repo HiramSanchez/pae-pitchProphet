@@ -2,6 +2,7 @@ import sqlite3
 from collections import defaultdict
 
 from src.models.evaluation import ModelEvaluation
+from src.models.prediction import PredictedResult
 from src.models.query import (
     BestPrediction,
     ModelComparison,
@@ -18,7 +19,11 @@ from src.repositories.user_prediction_repository import (
 )
 from src.config import SINGLE_USER_PREDICTOR
 from src.models.user_prediction import (
+    PerformanceParticipant,
+    PersonalModelComparison,
+    PersonalPerformance,
     UserPrediction,
+    UserPredictionModelSnapshot,
     UserPredictionRound,
 )
 
@@ -100,6 +105,95 @@ class QueryService:
             tournament_id,
             round_number,
             SINGLE_USER_PREDICTOR,
+        )
+
+    def get_personal_performance(
+        self,
+        tournament_id: int,
+    ) -> PersonalPerformance:
+        predictions = self.user_predictions.find_evaluated_by_tournament(
+            tournament_id, SINGLE_USER_PREDICTOR
+        )
+        correct = sum(item.points_awarded or 0 for item in predictions)
+        return PersonalPerformance(
+            tournament_id=tournament_id,
+            evaluated_matches=len(predictions),
+            correct=correct,
+            accuracy=(correct / len(predictions) if predictions else 0.0),
+        )
+
+    def compare_personal_performance(
+        self,
+        tournament_id: int,
+    ) -> PersonalModelComparison:
+        personal = self.user_predictions.find_evaluated_by_tournament(
+            tournament_id, SINGLE_USER_PREDICTOR
+        )
+        if not personal:
+            return PersonalModelComparison(tournament_id, 0, ())
+        prediction_ids = {
+            item.prediction_id for item in personal
+        }
+        snapshots = self.user_predictions.find_snapshots_for_predictions(
+            prediction_ids
+        )
+        snapshots_by_pick: dict[
+            int,
+            dict[tuple[str, str], UserPredictionModelSnapshot],
+        ] = defaultdict(dict)
+        for snapshot in snapshots:
+            snapshots_by_pick[snapshot.user_prediction_id][
+                (snapshot.model_name, snapshot.model_version)
+            ] = snapshot
+        identity_sets = [
+            set(snapshots_by_pick[item.prediction_id])
+            for item in personal
+        ]
+        common_identities = (
+            set.intersection(*identity_sets) if identity_sets else set()
+        )
+        completed = {
+            match.match_id: match
+            for match in self.matches.find_completed_by_tournament(
+                tournament_id
+            )
+        }
+        participants = [
+            PerformanceParticipant(
+                name="personal",
+                correct=sum(item.points_awarded or 0 for item in personal),
+                accuracy=sum(
+                    item.points_awarded or 0 for item in personal
+                )
+                / len(personal),
+            )
+        ]
+        for model_name, model_version in sorted(common_identities):
+            correct = 0
+            for item in personal:
+                match = completed[item.match_id]
+                snapshot = snapshots_by_pick[item.prediction_id][
+                    (model_name, model_version)
+                ]
+                actual = (
+                    PredictedResult.HOME
+                    if match.home_goals > match.away_goals
+                    else PredictedResult.AWAY
+                    if match.home_goals < match.away_goals
+                    else PredictedResult.DRAW
+                )
+                correct += snapshot.predicted_result == actual
+            participants.append(
+                PerformanceParticipant(
+                    name=f"{model_name}:{model_version}",
+                    correct=correct,
+                    accuracy=correct / len(personal),
+                )
+            )
+        return PersonalModelComparison(
+            tournament_id=tournament_id,
+            evaluated_matches=len(personal),
+            participants=tuple(participants),
         )
 
     def get_prediction_explanation(

@@ -7,6 +7,7 @@ from src.models.user_prediction import UserPickSelection
 from src.services.personal_prediction_service import (
     PersonalPredictionService,
 )
+from dataclasses import replace
 
 
 def test_query_service_answers_prediction_and_performance_queries() -> None:
@@ -86,3 +87,72 @@ def test_query_service_returns_personal_journal_data() -> None:
 
     assert service.get_personal_prediction_round(1, 2) is not None
     assert len(service.get_personal_predictions_for_round(1, 2)) == 1
+
+
+def test_personal_model_comparison_uses_frozen_common_predictions() -> None:
+    connection = database()
+    source_matches = matches(home_goals=2)
+    updater = DataUpdateService(connection)
+    updater.run(ManualMatchDataSource(source_matches))
+    scheduled = source_matches[1]
+    match_id = connection.execute(
+        """
+        SELECT id FROM matches
+        WHERE round_number = 2 AND status = 'scheduled'
+        """
+    ).fetchone()[0]
+    personal = PersonalPredictionService(connection)
+    personal.open_round(1, 2)
+    personal.save_picks(
+        1,
+        2,
+        [UserPickSelection(match_id, PredictedResult.AWAY)],
+    )
+    personal.finalize_round(1, 2)
+    frozen = [
+        tuple(row)
+        for row in connection.execute(
+            """
+            SELECT model_name, home_probability, draw_probability,
+                   away_probability
+            FROM user_prediction_model_snapshots
+            ORDER BY model_name
+            """
+        )
+    ]
+
+    updater.run(ManualMatchDataSource(matches(home_goals=1)))
+    completed = replace(
+        scheduled,
+        status="completed",
+        home_goals=0,
+        away_goals=1,
+    )
+    updater.run(
+        ManualMatchDataSource([source_matches[0], completed])
+    )
+    service = QueryService(connection)
+    performance = service.get_personal_performance(1)
+    comparison = service.compare_personal_performance(1)
+
+    assert performance.evaluated_matches == 1
+    assert performance.correct == 1
+    assert comparison.evaluated_matches == 1
+    assert {item.name for item in comparison.participants} == {
+        "personal",
+        "elo:1.0.0",
+        "elo_form:1.0.0",
+        "ensemble:1.0.0",
+        "poisson:1.0.0",
+    }
+    assert [
+        tuple(row)
+        for row in connection.execute(
+            """
+            SELECT model_name, home_probability, draw_probability,
+                   away_probability
+            FROM user_prediction_model_snapshots
+            ORDER BY model_name
+            """
+        )
+    ] == frozen

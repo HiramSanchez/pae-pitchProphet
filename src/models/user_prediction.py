@@ -42,3 +42,39 @@ class UserPrediction:
 class UserPickSelection:
     match_id: int
     predicted_result: PredictedResult
+
+
+@dataclass(frozen=True)
+class UserPredictionModelSnapshot:
+    snapshot_id: int
+    user_prediction_id: int
+    prediction_id: int
+    model_name: str
+    model_version: str
+    predicted_result: PredictedResult
+    home_probability: float
+    draw_probability: float
+    away_probability: float
+    captured_at: str
+
+
+@dataclass(frozen=True)
+class PerformanceParticipant:
+    name: str
+    correct: int
+    accuracy: float
+
+
+@dataclass(frozen=True)
+class PersonalPerformance:
+    tournament_id: int
+    evaluated_matches: int
+    correct: int
+    accuracy: float
+
+
+@dataclass(frozen=True)
+class PersonalModelComparison:
+    tournament_id: int
+    evaluated_matches: int
+    participants: tuple[PerformanceParticipant, ...]

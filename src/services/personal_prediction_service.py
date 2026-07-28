@@ -1,4 +1,5 @@
 import sqlite3
+from datetime import datetime, timezone
 
 from src.config import SINGLE_USER_PREDICTOR
 from src.models.prediction import PredictedResult
@@ -13,6 +14,7 @@ from src.repositories.user_prediction_repository import (
     UserPredictionRepository,
     UserPredictionRoundStateError,
 )
+from src.repositories.prediction_repository import PredictionRepository
 
 
 class PredictionRoundNotFoundError(LookupError):
@@ -33,6 +35,7 @@ class PersonalPredictionService:
         self.predictor = predictor
         self.matches = MatchRepository(connection)
         self.predictions = UserPredictionRepository(connection)
+        self.model_predictions = PredictionRepository(connection)
 
     def open_round(
         self,
@@ -130,9 +133,34 @@ class PersonalPredictionService:
                 "The prediction round is incomplete: "
                 f"{missing} active match picks are missing"
             )
-        return self.predictions.finalize_round(
-            tournament_id, round_number, self.predictor
-        )
+        timestamp = datetime.now(timezone.utc).isoformat()
+        self.connection.execute("SAVEPOINT finalize_personal_round")
+        try:
+            for user_prediction in self.predictions.find_by_round(
+                tournament_id, round_number, self.predictor
+            ):
+                for model_prediction in (
+                    self.model_predictions.find_views_by_match(
+                        user_prediction.match_id
+                    )
+                ):
+                    self.predictions.save_model_snapshot(
+                        user_prediction.prediction_id,
+                        model_prediction,
+                        timestamp,
+                    )
+            finalized = self.predictions.finalize_round(
+                tournament_id,
+                round_number,
+                self.predictor,
+                timestamp,
+            )
+            self.connection.execute("RELEASE finalize_personal_round")
+            return finalized
+        except Exception:
+            self.connection.execute("ROLLBACK TO finalize_personal_round")
+            self.connection.execute("RELEASE finalize_personal_round")
+            raise
 
     def _active_match_ids(
         self,

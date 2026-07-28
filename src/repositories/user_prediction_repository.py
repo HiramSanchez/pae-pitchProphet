@@ -3,10 +3,12 @@ from datetime import datetime, timezone
 
 from src.models.prediction import PredictedResult
 from src.models.user_prediction import (
+    UserPredictionModelSnapshot,
     UserPrediction,
     UserPredictionRound,
     UserPredictionRoundStatus,
 )
+from src.models.query import PredictionView
 
 
 class UserPredictionRoundStateError(ValueError):
@@ -233,6 +235,111 @@ class UserPredictionRepository:
         )
         return cursor.rowcount == 1
 
+    def save_model_snapshot(
+        self,
+        user_prediction_id: int,
+        prediction: PredictionView,
+        captured_at: str,
+    ) -> UserPredictionModelSnapshot:
+        self.connection.execute(
+            """
+            INSERT INTO user_prediction_model_snapshots (
+                user_prediction_id,
+                prediction_id,
+                model_name,
+                model_version,
+                predicted_result,
+                home_probability,
+                draw_probability,
+                away_probability,
+                captured_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_prediction_id, model_name, model_version)
+            DO NOTHING
+            """,
+            (
+                user_prediction_id,
+                prediction.prediction_id,
+                prediction.model_name,
+                prediction.model_version,
+                prediction.prediction.predicted_result.value,
+                prediction.prediction.home_probability,
+                prediction.prediction.draw_probability,
+                prediction.prediction.away_probability,
+                captured_at,
+            ),
+        )
+        row = self.connection.execute(
+            """
+            SELECT *
+            FROM user_prediction_model_snapshots
+            WHERE user_prediction_id = ?
+              AND model_name = ?
+              AND model_version = ?
+            """,
+            (
+                user_prediction_id,
+                prediction.model_name,
+                prediction.model_version,
+            ),
+        ).fetchone()
+        if row is None:
+            raise RuntimeError("Model prediction snapshot was not saved")
+        return self._snapshot_from_row(row)
+
+    def find_snapshots_for_predictions(
+        self,
+        user_prediction_ids: set[int],
+    ) -> list[UserPredictionModelSnapshot]:
+        if not user_prediction_ids:
+            return []
+        placeholders = ",".join("?" for _ in user_prediction_ids)
+        rows = self.connection.execute(
+            f"""
+            SELECT *
+            FROM user_prediction_model_snapshots
+            WHERE user_prediction_id IN ({placeholders})
+            ORDER BY user_prediction_id, model_name, model_version
+            """,
+            sorted(user_prediction_ids),
+        ).fetchall()
+        return [self._snapshot_from_row(row) for row in rows]
+
+    def find_evaluated_by_tournament(
+        self,
+        tournament_id: int,
+        predictor: str,
+    ) -> list[UserPrediction]:
+        rows = self.connection.execute(
+            """
+            SELECT
+                up.id,
+                up.match_id,
+                m.tournament_id,
+                m.round_number,
+                up.predictor,
+                up.predicted_outcome,
+                up.points_awarded,
+                up.created_at,
+                up.updated_at,
+                up.evaluated_at
+            FROM user_predictions up
+            INNER JOIN matches m ON m.id = up.match_id
+            WHERE m.tournament_id = ?
+              AND m.status = 'completed'
+              AND m.home_goals IS NOT NULL
+              AND m.away_goals IS NOT NULL
+              AND up.predictor = ?
+              AND up.is_final = 1
+              AND up.points_awarded IS NOT NULL
+              AND up.evaluated_at IS NOT NULL
+            ORDER BY m.round_number, up.match_id
+            """,
+            (tournament_id, predictor),
+        ).fetchall()
+        return [self._prediction_from_row(row) for row in rows]
+
     def save_open_prediction(
         self,
         tournament_id: int,
@@ -380,6 +487,23 @@ class UserPredictionRepository:
                 if row["evaluated_at"] is not None
                 else None
             ),
+        )
+
+    @staticmethod
+    def _snapshot_from_row(
+        row: sqlite3.Row,
+    ) -> UserPredictionModelSnapshot:
+        return UserPredictionModelSnapshot(
+            snapshot_id=int(row["id"]),
+            user_prediction_id=int(row["user_prediction_id"]),
+            prediction_id=int(row["prediction_id"]),
+            model_name=str(row["model_name"]),
+            model_version=str(row["model_version"]),
+            predicted_result=PredictedResult(str(row["predicted_result"])),
+            home_probability=float(row["home_probability"]),
+            draw_probability=float(row["draw_probability"]),
+            away_probability=float(row["away_probability"]),
+            captured_at=str(row["captured_at"]),
         )
 
     @staticmethod

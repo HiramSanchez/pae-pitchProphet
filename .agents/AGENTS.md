@@ -62,8 +62,9 @@ uniqueness is tournament, round, home team, and away team. Team statistics are
 stored on `teams` and rebuilt from completed matches.
 
 Approved migrations add/upgrade `user_predictions`,
-`user_prediction_rounds`, `model_versions`, `predictions`, and
-`model_evaluations`. `user_prediction_rounds` owns the manual
+`user_prediction_rounds`, `user_prediction_model_snapshots`,
+`model_versions`, `predictions`, and `model_evaluations`.
+`user_prediction_rounds` owns the manual
 `open -> finalized -> evaluated` journal lifecycle; dates and kickoffs do not
 control personal-pick writes. Versioned predictions store model, version,
 numeric configuration, probabilities, confidence, input snapshot, structured
@@ -122,6 +123,10 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   reevaluates corrected results idempotently, leaves postponed matches
   pending, and marks a finalized journal round evaluated only when every
   non-cancelled match has a complete result.
+- Finalizing a journal round atomically captures immutable model forecasts in
+  `user_prediction_model_snapshots`. Personal-versus-model accuracy uses only
+  evaluated picks and model identities represented on every compared match;
+  later scheduled-prediction revisions never alter these snapshots.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 

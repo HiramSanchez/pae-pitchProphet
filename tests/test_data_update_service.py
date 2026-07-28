@@ -11,6 +11,7 @@ from src.database.migrations import (
     migrate_team_statistics_schema,
     migrate_update_pipeline_schema,
     migrate_user_prediction_journal_schema,
+    migrate_user_prediction_model_snapshots_schema,
 )
 from src.models.match import ExternalMatch
 from src.services.data_update_service import DataUpdateService
@@ -29,6 +30,7 @@ def database() -> sqlite3.Connection:
     migrate_team_statistics_schema(connection)
     migrate_prediction_persistence_schema(connection)
     migrate_user_prediction_journal_schema(connection)
+    migrate_user_prediction_model_snapshots_schema(connection)
     migrate_prediction_revisions_schema(connection)
     migrate_evaluation_persistence_schema(connection)
     migrate_update_pipeline_schema(connection)

@@ -13,6 +13,9 @@ from src.repositories.user_prediction_repository import (
 from src.services.personal_prediction_service import (
     PersonalPredictionService,
 )
+from src.data_sources.manual_source import ManualMatchDataSource
+from src.services.data_update_service import DataUpdateService
+from tests.test_data_update_service import matches
 from tests.test_data_update_service import database
 
 
@@ -106,3 +109,35 @@ def test_cancelled_match_is_excluded_from_finalization() -> None:
     finalized = service.finalize_round(1, 2)
 
     assert finalized.status == UserPredictionRoundStatus.FINALIZED
+
+
+def test_finalization_captures_available_models_idempotently() -> None:
+    connection = database()
+    DataUpdateService(connection).run(
+        ManualMatchDataSource(matches())
+    )
+    match_id = connection.execute(
+        "SELECT id FROM matches WHERE status = 'scheduled'"
+    ).fetchone()[0]
+    service = PersonalPredictionService(connection)
+    service.open_round(1, 2)
+    service.save_picks(
+        1, 2, [UserPickSelection(match_id, PredictedResult.HOME)]
+    )
+
+    service.finalize_round(1, 2)
+    service.finalize_round(1, 2)
+
+    rows = connection.execute(
+        """
+        SELECT model_name, model_version
+        FROM user_prediction_model_snapshots
+        ORDER BY model_name
+        """
+    ).fetchall()
+    assert [tuple(row) for row in rows] == [
+        ("elo", "1.0.0"),
+        ("elo_form", "1.0.0"),
+        ("ensemble", "1.0.0"),
+        ("poisson", "1.0.0"),
+    ]
