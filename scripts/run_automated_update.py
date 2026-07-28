@@ -50,7 +50,10 @@ def main() -> int:
         )
         with database_connection() as connection:
             migrate_runtime_schema(connection)
-            return DataUpdateService(connection).run(data_source)
+            return DataUpdateService(
+                connection,
+                logger=logger,
+            ).run(data_source)
 
     try:
         AutomationService(

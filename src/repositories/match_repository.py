@@ -2,7 +2,12 @@ import sqlite3
 from dataclasses import dataclass
 
 from src.config import DEFAULT_ELO
-from src.models.match import CompletedMatch, ExternalMatch, ScheduledMatch
+from src.models.match import (
+    CompletedMatch,
+    ExternalMatch,
+    RoundMatch,
+    ScheduledMatch,
+)
 
 
 @dataclass(frozen=True)
@@ -227,6 +232,8 @@ class MatchRepository:
                 updated += self._update_match_if_changed(
                     match_id, external, tournament_id, home_id, away_id
                 )
+        for tournament_id in tournament_ids:
+            self._refresh_current_round(tournament_id)
         return MatchSyncResult(added, updated, frozenset(tournament_ids))
 
     def _update_match_if_changed(
@@ -275,6 +282,103 @@ class MatchRepository:
             else None
         )
 
+    def find_active_match_ids_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[int]:
+        rows = self.connection.execute(
+            """
+            SELECT id
+            FROM matches
+            WHERE tournament_id = ?
+              AND round_number = ?
+              AND status != 'cancelled'
+            ORDER BY id
+            """,
+            (tournament_id, round_number),
+        ).fetchall()
+        return [int(row["id"]) for row in rows]
+
+    def find_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> list[RoundMatch]:
+        rows = self.connection.execute(
+            """
+            SELECT
+                m.id AS match_id,
+                m.tournament_id,
+                m.round_number,
+                m.home_team_id,
+                home.name AS home_team_name,
+                m.away_team_id,
+                away.name AS away_team_name,
+                m.status,
+                m.match_date,
+                m.home_goals,
+                m.away_goals
+            FROM matches m
+            INNER JOIN teams home ON home.id = m.home_team_id
+            INNER JOIN teams away ON away.id = m.away_team_id
+            WHERE m.tournament_id = ?
+              AND m.round_number = ?
+            ORDER BY m.id
+            """,
+            (tournament_id, round_number),
+        ).fetchall()
+        return [
+            RoundMatch(
+                match_id=int(row["match_id"]),
+                tournament_id=int(row["tournament_id"]),
+                round_number=int(row["round_number"]),
+                home_team_id=int(row["home_team_id"]),
+                home_team_name=str(row["home_team_name"]),
+                away_team_id=int(row["away_team_id"]),
+                away_team_name=str(row["away_team_name"]),
+                status=str(row["status"]),
+                match_date=(
+                    str(row["match_date"])
+                    if row["match_date"] is not None
+                    else None
+                ),
+                home_goals=(
+                    int(row["home_goals"])
+                    if row["home_goals"] is not None
+                    else None
+                ),
+                away_goals=(
+                    int(row["away_goals"])
+                    if row["away_goals"] is not None
+                    else None
+                ),
+            )
+            for row in rows
+        ]
+
+    def count_pending_results_by_round(
+        self,
+        tournament_id: int,
+        round_number: int,
+    ) -> int:
+        row = self.connection.execute(
+            """
+            SELECT COUNT(*) AS pending
+            FROM matches
+            WHERE tournament_id = ?
+              AND round_number = ?
+              AND status != 'cancelled'
+              AND (
+                  status != 'completed'
+                  OR home_goals IS NULL
+                  OR away_goals IS NULL
+              )
+            """,
+            (tournament_id, round_number),
+        ).fetchone()
+        return int(row["pending"])
+
     def _tournament_id(self, match: ExternalMatch) -> int:
         name = self._normalize(match.tournament_name)
         season = self._normalize(match.season)
@@ -295,15 +399,31 @@ class MatchRepository:
                 (name, season, match.round_number),
             )
             return int(cursor.lastrowid)
-        tournament_id = int(row["id"])
+        return int(row["id"])
+
+    def _refresh_current_round(self, tournament_id: int) -> None:
         self.connection.execute(
             """
-            UPDATE tournaments SET current_round = MAX(current_round, ?)
+            UPDATE tournaments
+            SET current_round = COALESCE(
+                (
+                    SELECT MIN(round_number)
+                    FROM matches
+                    WHERE tournament_id = tournaments.id
+                      AND status = 'scheduled'
+                ),
+                (
+                    SELECT MAX(round_number)
+                    FROM matches
+                    WHERE tournament_id = tournaments.id
+                      AND status = 'completed'
+                ),
+                1
+            )
             WHERE id = ?
             """,
-            (match.round_number, tournament_id),
+            (tournament_id,),
         )
-        return tournament_id
 
     def _team_id(self, raw_name: str) -> int:
         name = self._normalize(raw_name)

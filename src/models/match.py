@@ -68,3 +68,18 @@ class ExternalMatch:
             raise ValueError("Completed matches require both scores")
         if (self.home_goals is None) != (self.away_goals is None):
             raise ValueError("Scores must both be present or absent")
+
+
+@dataclass(frozen=True)
+class RoundMatch:
+    match_id: int
+    tournament_id: int
+    round_number: int
+    home_team_id: int
+    home_team_name: str
+    away_team_id: int
+    away_team_name: str
+    status: str
+    match_date: str | None
+    home_goals: int | None
+    away_goals: int | None

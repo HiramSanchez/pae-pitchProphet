@@ -61,13 +61,17 @@ Core SQLite entities are `tournaments`, `teams`, `matches`, and `elo_history`.
 uniqueness is tournament, round, home team, and away team. Team statistics are
 stored on `teams` and rebuilt from completed matches.
 
-Approved migrations add/upgrade `user_predictions`, `model_versions`,
-`predictions`, and `model_evaluations`. Versioned predictions store model,
-version, numeric configuration, probabilities, confidence, input snapshot,
-structured explanation, and creation time. Poisson and ensemble extended
-outputs live in `input_snapshot_json.model_output`; do not add columns for
-them. Never assume the local real database has already run every migration:
-inspect `PRAGMA table_info` before schema-sensitive changes.
+Approved migrations add/upgrade `user_predictions`,
+`user_prediction_rounds`, `user_prediction_model_snapshots`,
+`model_versions`, `predictions`, and `model_evaluations`.
+`user_prediction_rounds` owns the manual
+`open -> finalized -> evaluated` journal lifecycle; dates and kickoffs do not
+control personal-pick writes. Versioned predictions store model, version,
+numeric configuration, probabilities, confidence, input snapshot, structured
+explanation, and creation time. Poisson and ensemble extended outputs live in
+`input_snapshot_json.model_output`; do not add columns for them. Never assume
+the local real database has already run every migration: inspect
+`PRAGMA table_info` before schema-sensitive changes.
 
 Any schema change requires an idempotent migration, in-memory migration tests,
 and a documented compatibility/recovery path. Never mutate `data/liga_mx.db`
@@ -100,16 +104,43 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   failed functional changes are rolled back.
 - `QueryService` is the structured read boundary for API/conversation. It
   returns domain dataclasses, never SQLite rows or presentation text.
+- Product reads compose the next scheduled round, optional journal, personal
+  picks, persisted model predictions, round results, and performance without
+  recalculation. Legacy picks with `points_awarded` count toward personal
+  performance even without `evaluated_at`; model comparison excludes picks
+  without frozen snapshots so every participant uses the same match set.
 - Scheduled prediction updates archive immutable revisions only when the input
   snapshot changes. Completed predictions are immutable; changed-prediction
   queries compare the latest archived revision with current persisted state.
 - FastAPI endpoints depend on services through an injected per-request SQLite
   connection. The initial Spanish conversational interpreter is deterministic;
   it selects `QueryService` operations and never calculates probabilities.
+- The optional Phase 18 LLM adapter is deferred technical debt. Do not add a
+  provider, model, SDK, cost, or secret without renewed explicit approval.
+- The deterministic interpreter supports model queries plus next round,
+  personal picks, explicit-round results, personal performance, and
+  personal-versus-model comparison. Result questions require a parsed round
+  number; personal-pick questions without one use the latest journal.
 - Operational automation wraps the complete idempotent update pipeline in
   bounded retries, emits structured UTC JSON logs, and relies on `update_runs`
   for per-attempt audit. Local scheduling uses Windows Task Scheduler; no
   resident daemon is part of the application.
+- SQLite connections enforce foreign keys and a five-second busy timeout.
+  Initialization backs up existing databases before migrations; restores
+  verify integrity and preserve the current database before replacement.
+- The single-user journal currently uses configured predictor `Hiram`.
+  `UserPredictionRepository` owns journal persistence, keeps legacy
+  `user_predictions.is_final = 1`, and rejects writes unless the related
+  `user_prediction_rounds` row is `open`.
+- `PersonalEvaluationService` runs after derived-state rebuilding in the
+  update pipeline. It scores completed personal picks as categorical 0/1,
+  reevaluates corrected results idempotently, leaves postponed matches
+  pending, and marks a finalized journal round evaluated only when every
+  non-cancelled match has a complete result.
+- Finalizing a journal round atomically captures immutable model forecasts in
+  `user_prediction_model_snapshots`. Personal-versus-model accuracy uses only
+  evaluated picks and model identities represented on every compared match;
+  later scheduled-prediction revisions never alter these snapshots.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 

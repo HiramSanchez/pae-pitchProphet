@@ -21,6 +21,54 @@ def client_with_data() -> tuple[TestClient, sqlite3.Connection]:
     return TestClient(create_app(provider)), connection
 
 
+def test_local_frontend_origin_is_allowed_by_cors() -> None:
+    client, _ = client_with_data()
+
+    response = client.options(
+        "/tournaments/1/rounds/next",
+        headers={
+            "Origin": "http://127.0.0.1:5173",
+            "Access-Control-Request-Method": "GET",
+        },
+    )
+
+    assert response.status_code == 200
+    assert (
+        response.headers["access-control-allow-origin"]
+        == "http://127.0.0.1:5173"
+    )
+
+
+def test_health_and_readiness_report_operational_state() -> None:
+    client, _ = client_with_data()
+
+    health = client.get("/health")
+    readiness = client.get("/readiness")
+
+    assert health.status_code == 200
+    assert health.json() == {"status": "ok"}
+    assert readiness.status_code == 200
+    assert readiness.json() == {
+        "status": "ready",
+        "missing_tables": [],
+    }
+
+
+def test_readiness_reports_missing_schema() -> None:
+    connection = sqlite3.connect(":memory:", check_same_thread=False)
+    connection.row_factory = sqlite3.Row
+
+    @contextmanager
+    def provider() -> Iterator[sqlite3.Connection]:
+        yield connection
+
+    response = TestClient(create_app(provider)).get("/readiness")
+
+    assert response.status_code == 503
+    assert response.json()["status"] == "not_ready"
+    assert "matches" in response.json()["missing_tables"]
+
+
 def test_prediction_and_performance_endpoints() -> None:
     client, connection = client_with_data()
     match_id = connection.execute(
@@ -31,6 +79,10 @@ def test_prediction_and_performance_endpoints() -> None:
     match_response = client.get(f"/matches/{match_id}/predictions")
     explanation = client.get(f"/matches/{match_id}/explanation")
     performance = client.get("/models/performance?tournament_id=1")
+    next_round = client.get("/tournaments/1/rounds/next")
+    results = client.get("/tournaments/1/rounds/1/results")
+    personal = client.get("/tournaments/1/performance/personal")
+    comparison = client.get("/tournaments/1/performance/comparison")
 
     assert round_response.status_code == 200
     assert len(round_response.json()) == 4
@@ -40,6 +92,13 @@ def test_prediction_and_performance_endpoints() -> None:
     assert explanation.json()["prediction"]["model_name"] == "ensemble"
     assert performance.status_code == 200
     assert len(performance.json()) == 4
+    assert next_round.status_code == 200
+    assert next_round.json()["round_number"] == 2
+    assert len(next_round.json()["matches"][0]["predictions"]) == 4
+    assert results.status_code == 200
+    assert results.json()["matches"][0]["actual_result"] == "HOME"
+    assert personal.json()["evaluated_matches"] == 0
+    assert comparison.json()["participants"] == []
 
 
 def test_primary_spanish_query_returns_required_prediction_context() -> None:
@@ -68,6 +127,52 @@ def test_primary_spanish_query_returns_required_prediction_context() -> None:
     assert view["explanation"]["uncertainty"]
 
 
+def test_product_questions_return_structured_spanish_answers() -> None:
+    client, _ = client_with_data()
+    requests = [
+        ("¿Cuál es la siguiente jornada?", "next_round"),
+        ("¿Cuáles fueron mis pronósticos?", "personal_picks"),
+        ("¿Cómo me fue en la jornada 1?", "round_results"),
+        ("¿Cuál es mi efectividad?", "personal_performance"),
+        (
+            "¿Cómo voy contra los modelos?",
+            "personal_model_comparison",
+        ),
+    ]
+
+    responses = [
+        client.post(
+            "/queries",
+            json={"question": question, "tournament_id": 1},
+        )
+        for question, _ in requests
+    ]
+
+    assert all(response.status_code == 200 for response in responses)
+    assert [
+        response.json()["intent"] for response in responses
+    ] == [intent for _, intent in requests]
+    assert responses[0].json()["data"]["round_number"] == 2
+    assert responses[1].json()["data"]["journal"] is None
+    assert responses[2].json()["data"]["round_number"] == 1
+    assert responses[3].json()["data"]["evaluated_matches"] == 0
+    assert responses[4].json()["data"]["participants"] == []
+
+
+def test_round_results_question_requires_round_context() -> None:
+    client, _ = client_with_data()
+
+    response = client.post(
+        "/queries",
+        json={
+            "question": "¿Cuáles son los resultados de la jornada?",
+            "tournament_id": 1,
+        },
+    )
+
+    assert response.status_code == 400
+
+
 def test_query_validation_and_missing_resources_are_http_errors() -> None:
     client, _ = client_with_data()
 
@@ -77,10 +182,14 @@ def test_query_validation_and_missing_resources_are_http_errors() -> None:
     )
     missing = client.get("/matches/999/predictions")
     invalid = client.get("/models/performance?tournament_id=0")
+    missing_round = client.get("/tournaments/999/rounds/next")
+    missing_results = client.get("/tournaments/1/rounds/999/results")
 
     assert unknown.status_code == 422
     assert missing.status_code == 404
     assert invalid.status_code == 422
+    assert missing_round.status_code == 404
+    assert missing_results.status_code == 404
 
 
 def test_update_endpoint_calls_pipeline_with_canonical_matches() -> None:
@@ -112,3 +221,65 @@ def test_update_endpoint_calls_pipeline_with_canonical_matches() -> None:
     assert response.status_code == 200
     assert response.json()["matches_added"] == 1
     assert response.json()["predictions_generated"] == 4
+
+
+def test_personal_journal_api_supports_open_save_finalize_and_get() -> None:
+    client, connection = client_with_data()
+    match_id = connection.execute(
+        "SELECT id FROM matches WHERE status = 'scheduled'"
+    ).fetchone()[0]
+
+    opened = client.post("/tournaments/1/rounds/2/journal")
+    saved = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={
+            "picks": [
+                {
+                    "match_id": match_id,
+                    "predicted_outcome": "home",
+                }
+            ]
+        },
+    )
+    pick_id = saved.json()["picks"][0]["prediction_id"]
+    changed = client.patch(
+        f"/picks/{pick_id}",
+        json={"predicted_outcome": "draw"},
+    )
+    finalized = client.post("/tournaments/1/rounds/2/finalize")
+    retrieved = client.get("/tournaments/1/rounds/2/picks")
+    locked = client.patch(
+        f"/picks/{pick_id}",
+        json={"predicted_outcome": "away"},
+    )
+
+    assert opened.status_code == 200
+    assert opened.json()["journal"]["status"] == "open"
+    assert saved.status_code == 200
+    assert changed.status_code == 200
+    assert changed.json()["predicted_result"] == "DRAW"
+    assert finalized.status_code == 200
+    assert finalized.json()["journal"]["status"] == "finalized"
+    assert retrieved.json()["picks"][0]["predicted_result"] == "DRAW"
+    assert locked.status_code == 409
+
+
+def test_personal_journal_api_reports_incomplete_and_missing_rounds() -> None:
+    client, _ = client_with_data()
+
+    missing = client.post("/tournaments/999/rounds/2/journal")
+    unopened = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={"picks": []},
+    )
+    client.post("/tournaments/1/rounds/2/journal")
+    incomplete = client.post("/tournaments/1/rounds/2/finalize")
+    invalid_outcome = client.put(
+        "/tournaments/1/rounds/2/picks",
+        json={"picks": [{"match_id": 1, "predicted_outcome": "win"}]},
+    )
+
+    assert missing.status_code == 404
+    assert unopened.status_code == 409
+    assert incomplete.status_code == 400
+    assert invalid_outcome.status_code == 422

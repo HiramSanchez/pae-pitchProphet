@@ -1,5 +1,54 @@
 # Manual de usuario
 
+## Usar la aplicación web
+
+Inicia la API desde la raíz del repositorio:
+
+```powershell
+python -m scripts.run_api --host 127.0.0.1 --port 8000
+```
+
+En otra terminal inicia el cliente:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Abre `http://127.0.0.1:5173`. En **Siguiente jornada** puedes consultar los
+partidos y los pronósticos del modelo. En **Mi quiniela** abre el registro,
+elige local, empate o visitante para cada partido y confirma la jornada cuando
+esté completa. La confirmación bloquea las selecciones para conservar el
+historial. **Resultados** y **Rendimiento** muestran lo ocurrido y comparan tu
+efectividad con los modelos. **Preguntar** acepta únicamente las intenciones
+en español soportadas por el intérprete determinista.
+
+### Verificación operativa
+
+`http://127.0.0.1:8000/health` confirma que el proceso está activo.
+`http://127.0.0.1:8000/readiness` además comprueba la conexión SQLite y las
+tablas mínimas de v2. Un `503` de readiness indica que debes inicializar o
+migrar la base.
+
+### Respaldar y restaurar
+
+Detén la API antes de restaurar. Para crear un respaldo manual:
+
+```powershell
+python -m scripts.backup_database
+```
+
+Para restaurarlo:
+
+```powershell
+python -m scripts.restore_database backups\liga_mx-manual-YYYYMMDDTHHMMSSZ.db
+```
+
+La restauración valida el respaldo y conserva automáticamente la base actual
+como otro respaldo `before-restore`. La inicialización también respalda una
+base existente antes de ejecutar migraciones.
+
 ## Prueba local del pipeline de actualización
 
 Inicializa la base local si todavía no existe:
@@ -115,3 +164,47 @@ with sqlite3.connect(uri, uri=True) as connection:
 Verifica que el último `update_runs` tenga estado `succeeded`, que existan los
 cuatro partidos sin duplicados, evaluaciones de los cuatro modelos y cuatro
 predicciones por cada partido que siga programado.
+
+## Consultas orientadas al producto
+
+Con el API iniciado, la vista completa de la siguiente jornada se obtiene con:
+
+```http
+GET /tournaments/1/rounds/next
+```
+
+La respuesta agrupa los cruces, el estado de cada partido, su fecha opcional,
+la quiniela personal si existe y las predicciones persistidas de los modelos.
+No recalcula predicciones durante la consulta.
+
+Los resultados y el rendimiento se consultan con:
+
+```http
+GET /tournaments/1/rounds/1/results
+GET /tournaments/1/performance/personal
+GET /tournaments/1/performance/comparison
+```
+
+Una respuesta de rendimiento con cero partidos evaluados es válida. La
+comparación utiliza los pronósticos de modelo congelados al finalizar la
+quiniela y solo incluye modelos representados en todos los partidos
+comparados.
+
+## Preguntas determinísticas en español
+
+`POST /queries` también acepta preguntas de producto:
+
+```text
+¿Cuál es la siguiente jornada?
+¿Cuáles fueron mis pronósticos?
+¿Cómo me fue en la jornada 8?
+¿Cuál es mi efectividad?
+¿Cómo voy contra los modelos?
+```
+
+El intérprete normaliza mayúsculas y acentos, selecciona una operación de
+`QueryService` y devuelve un mensaje en español junto con datos estructurados.
+No utiliza un LLM, no ejecuta SQL arbitrario y no calcula predicciones. Para
+consultar resultados se debe indicar explícitamente el número de jornada; si
+una pregunta sobre pronósticos personales no indica jornada, se devuelve la
+quiniela personal más reciente.

@@ -1,0 +1,101 @@
+[
+  {
+    "external_match_id": "ap26-r02-01",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Cruz Azul",
+    "away_team_name": "Puebla",
+    "status": "completed",
+    "home_goals": 2,
+    "away_goals": 1
+  },
+  {
+    "external_match_id": "ap26-r02-02",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Toluca",
+    "away_team_name": "Pumas",
+    "status": "completed",
+    "home_goals": 1,
+    "away_goals": 2
+  },
+  {
+    "external_match_id": "ap26-r02-03",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Tigres",
+    "away_team_name": "San Luis",
+    "status": "completed",
+    "home_goals": 2,
+    "away_goals": 2
+  },
+  {
+    "external_match_id": "ap26-r02-04",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Atlante",
+    "away_team_name": "América",
+    "status": "completed",
+    "home_goals": 1,
+    "away_goals": 1
+  },
+  {
+    "external_match_id": "ap26-r02-05",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Tijuana",
+    "away_team_name": "León",
+    "status": "completed",
+    "home_goals": 1,
+    "away_goals": 0
+  },
+  {
+    "external_match_id": "ap26-r02-06",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Guadalajara",
+    "away_team_name": "Juárez",
+    "status": "completed",
+    "home_goals": 1,
+    "away_goals": 0
+  },
+  {
+    "external_match_id": "ap26-r02-07",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Santos",
+    "away_team_name": "Atlas",
+    "status": "completed",
+    "home_goals": 0,
+    "away_goals": 1
+  },
+  {
+    "external_match_id": "ap26-r02-08",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Necaxa",
+    "away_team_name": "Monterrey",
+    "status": "completed",
+    "home_goals": 2,
+    "away_goals": 1
+  },
+  {
+    "external_match_id": "ap26-r02-09",
+    "tournament_name": "Liga MX",
+    "season": "Apertura 2026",
+    "round_number": 2,
+    "home_team_name": "Pachuca",
+    "away_team_name": "Querétaro",
+    "status": "completed",
+    "home_goals": 1,
+    "away_goals": 2
+  }
+]

@@ -14,6 +14,12 @@ from src.database.migrations.runtime import migrate_runtime_schema
 from src.database.migrations.team_statistics import (
     migrate_team_statistics_schema,
 )
+from src.database.migrations.user_prediction_journal import (
+    migrate_user_prediction_journal_schema,
+)
+from src.database.migrations.user_prediction_model_snapshots import (
+    migrate_user_prediction_model_snapshots_schema,
+)
 
 __all__ = [
     "migrate_evaluation_persistence_schema",
@@ -22,4 +28,6 @@ __all__ = [
     "migrate_update_pipeline_schema",
     "migrate_runtime_schema",
     "migrate_team_statistics_schema",
+    "migrate_user_prediction_journal_schema",
+    "migrate_user_prediction_model_snapshots_schema",
 ]

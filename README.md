@@ -3,11 +3,10 @@
 PitchProphet is a Python backend for importing football fixtures and results,
 maintaining derived team data, generating reproducible match predictions, and
 comparing model performance over time. It combines a SQLite application with
-command-line workflows and a FastAPI REST interface.
+command-line workflows, a FastAPI REST interface, and a local React web app.
 
-The project currently provides a complete local backend and API. It does not
-include a graphical frontend, a ChatGPT-like chat interface, live commercial
-data feeds, or an LLM integration.
+The deterministic Spanish question interface is not an LLM integration.
+PitchProphet also does not bundle live commercial data feeds.
 
 ## Table of Contents
 
@@ -18,6 +17,7 @@ data feeds, or an LLM integration.
 - [Database setup](#database-setup)
 - [Running the data update pipeline](#running-the-data-update-pipeline)
 - [Running the API](#running-the-api)
+- [Running the web app](#running-the-web-app)
 - [API endpoints](#api-endpoints)
 - [How to use PitchProphet](#how-to-use-pitchprophet)
 - [Understanding prediction output](#understanding-prediction-output)
@@ -50,6 +50,8 @@ data feeds, or an LLM integration.
 - Structured queries for model comparisons, best predictions, draw
   probabilities, model performance, and changed predictions.
 - FastAPI endpoints and a deterministic Spanish question interpreter.
+- A React web app for the next round, personal picks, results, performance,
+  and supported Spanish questions.
 - Bounded operational retries, UTC JSON logs, and `update_runs` auditing.
 
 ## Architecture
@@ -103,6 +105,7 @@ PitchProphet/
 |-- data/                 # Local SQLite database (runtime data)
 |-- docs/                 # User and operational documentation
 |-- examples/             # Valid sample match-source JSON
+|-- frontend/             # React, TypeScript, and Vite web application
 |-- scripts/              # Module-based CLI entry points
 |-- src/
 |   |-- api/              # FastAPI routes and Pydantic request schemas
@@ -122,7 +125,8 @@ PitchProphet/
 
 - Python **3.11 or newer** (`StrEnum` is used by the codebase).
 - Windows PowerShell or Command Prompt for the commands below.
-- No external database server or optional package is required.
+- Node.js **20.19 or newer** and npm are required for the web app.
+- No external database server is required.
 
 After cloning or downloading the repository, open PowerShell in its root and
 run:
@@ -250,19 +254,50 @@ python -m scripts.run_api --host 127.0.0.1 --port 8000
 - API base URL: <http://127.0.0.1:8000>
 - Swagger UI: <http://127.0.0.1:8000/docs>
 - OpenAPI JSON: <http://127.0.0.1:8000/openapi.json>
+- Liveness: <http://127.0.0.1:8000/health>
+- Readiness: <http://127.0.0.1:8000/readiness>
 
 `GET /` currently returns `404 Not Found` because no root route is registered;
-this does not mean the API failed to start. The recommended way to explore and
-execute requests is Swagger UI.
+this does not mean the API failed to start. The web app runs separately.
+
+## Running the web app
+
+Keep the API running at `http://127.0.0.1:8000`. In a second PowerShell
+terminal:
+
+```powershell
+cd frontend
+npm install
+npm run dev
+```
+
+Open <http://127.0.0.1:5173>. The five views let you inspect the next round,
+record and finalize a complete personal quiniela, review one round's results,
+compare performance, and ask one of the supported Spanish questions.
+
+The default API URL can be changed by copying `frontend/.env.example` to
+`frontend/.env` and editing `VITE_API_BASE_URL`. The API permits browser
+requests from the local Vite origins `127.0.0.1:5173` and `localhost:5173`.
 
 ## API endpoints
 
 | Method | Route | Purpose | Required input | Main response | Relevant errors |
 | --- | --- | --- | --- | --- | --- |
+| GET | `/health` | Confirm that the API process is alive. | None. | `{"status":"ok"}`. | None under normal process operation. |
+| GET | `/readiness` | Confirm SQLite access and the minimum v2 schema. | None. | Ready status and missing-table list. | `503` when storage or schema is not ready. |
 | GET | `/tournaments/{tournament_id}/rounds/{round_number}/predictions` | List stored predictions for a round. | Integer path parameters. | Array of prediction views; may be empty. | `422` for malformed path values. |
 | GET | `/matches/{match_id}/predictions` | Compare all stored models for a match. | Integer `match_id`. | Model comparison with predictions, favorites, agreement, and probability ranges. | `404` when no predictions exist; `422` for malformed input. |
 | GET | `/matches/{match_id}/explanation` | Get one model's structured explanation. | Integer `match_id`; optional `model_name` (default `ensemble`) and `model_version` (default `1.0.0`). | Prediction and explanation factors. | `404` when that prediction/explanation does not exist. |
 | GET | `/models/performance` | Get latest evaluations ranked by Log Loss. | Positive query parameter `tournament_id`. | Array of model evaluations. | `422` when the ID is missing or not positive. |
+| GET | `/tournaments/{tournament_id}/rounds/next` | Get the next scheduled round as one product view. | Integer tournament ID. | Round, journal state, matches, personal picks, and persisted model predictions. | `404` when no scheduled round exists. |
+| GET | `/tournaments/{tournament_id}/rounds/{round_number}/results` | Get match results and personal picks for a round. | Integer tournament and round IDs. | Match statuses, scores, actual outcomes, journal state, and picks. | `404` when the round does not exist. |
+| GET | `/tournaments/{tournament_id}/performance/personal` | Get personal categorical accuracy. | Integer tournament ID. | Evaluated matches, correct picks, and accuracy; zero values are valid. | `422` for malformed path values. |
+| GET | `/tournaments/{tournament_id}/performance/comparison` | Compare personal accuracy with frozen model forecasts. | Integer tournament ID. | Participants evaluated on the same completed matches. | `422` for malformed path values. |
+| POST | `/tournaments/{tournament_id}/rounds/{round_number}/journal` | Open the single-user journal for a round. | Integer tournament and round IDs. | Journal state and an empty initial pick list. | `404` when the round has no active matches. |
+| PUT | `/tournaments/{tournament_id}/rounds/{round_number}/picks` | Save partial picks while a journal is open. | List of match IDs and `home`, `draw`, or `away`. | Current journal and pick collection. | `400` for invalid matches; `409` when not open. |
+| PATCH | `/picks/{prediction_id}` | Change one open personal pick. | One lowercase predicted outcome. | Updated personal prediction. | `404` when absent; `409` when locked. |
+| POST | `/tournaments/{tournament_id}/rounds/{round_number}/finalize` | Confirm a complete round and freeze model forecasts. | Integer tournament and round IDs. | Finalized journal and picks. | `400` when incomplete; `409` for invalid state. |
+| GET | `/tournaments/{tournament_id}/rounds/{round_number}/picks` | Retrieve a personal journal. | Integer tournament and round IDs. | Journal and saved picks. | `404` when no journal exists. |
 | POST | `/updates/run` | Run the idempotent pipeline from canonical matches in the request. | `source_name` and `matches`; `source_name` defaults to `api`. | Run ID and insert/update/prediction counts. | `422` for invalid request data; pipeline failures return server errors. |
 | POST | `/queries` | Interpret a supported Spanish question and return structured data. | Non-empty `question`, positive `tournament_id`, optional positive `match_id`. | Intent, Spanish message, and structured result. | `400` for missing intent context; `422` for unsupported intent or invalid request. |
 
@@ -579,8 +614,18 @@ show the valid empty result.
    guaranteed outcome.
 
 PitchProphet is currently a backend/API. The `/queries` endpoint recognizes a
-small deterministic set of Spanish intents; it is not a general-purpose chat
-or LLM interface.
+deterministic set of Spanish intents; it is not a general-purpose chat or LLM
+interface. Besides model predictions, draws, changes, performance, and
+match-level comparison, it recognizes:
+
+- `¿Cuál es la siguiente jornada?`
+- `¿Cuáles fueron mis pronósticos?`
+- `¿Cómo me fue en la jornada 8?`
+- `¿Cuál es mi efectividad?`
+- `¿Cómo voy contra los modelos?`
+
+Questions about round results must include the round number. Personal-pick
+questions without one return the latest personal journal.
 
 ## Understanding prediction output
 
@@ -604,11 +649,39 @@ data quality. They are estimates, not guarantees or betting advice.
 
 ## Testing
 
-Run the complete suite from the repository root:
+Run the backend suite from the repository root:
 
 ```powershell
 python -m pytest
 ```
+
+Run frontend tests and create a production build:
+
+```powershell
+cd frontend
+npm test
+npm run build
+```
+
+For a production build, copy `.env.production.example` to `.env.production`,
+set the public HTTPS API URL, and run `npm run build`. Serve `frontend/dist`
+with SPA fallback to `index.html`. Add that exact web origin to
+`FRONTEND_ORIGINS`; credentials and wildcard origins are intentionally not
+enabled.
+
+## Backup and recovery
+
+`python -m scripts.initialize_database` creates an integrity-checked backup of
+an existing database before applying idempotent migrations. Manual backups and
+restores are also available:
+
+```powershell
+python -m scripts.backup_database
+python -m scripts.restore_database backups\liga_mx-manual-YYYYMMDDTHHMMSSZ.db
+```
+
+Restore verifies the selected file first and preserves the current database
+as a `before-restore` backup. Stop the API and update commands before restoring.
 
 Useful focused suites include:
 
@@ -617,9 +690,6 @@ python -m pytest tests/test_api.py
 python -m pytest tests/test_data_update_service.py tests/test_sample_matches.py
 python -m pytest tests/test_prediction_models.py tests/test_backtesting_service.py
 ```
-
-At the time of this README review, the complete suite contains **141 passing
-tests**. This count will naturally change as the project evolves.
 
 ## Automation
 
@@ -705,9 +775,12 @@ network access. The automated command classifies these failures as
 
 - SQLite and local files are intended for a single local deployment, not
   horizontally scaled concurrent workers.
-- No graphical frontend or root web page is included.
+- The web app is a local single-user client; production hosting and
+  authentication are not configured.
 - The question interpreter supports a fixed set of Spanish keyword-based
   intents; it is not general natural-language understanding.
+- The optional LLM adapter is deferred technical debt; no provider, model,
+  cost, dependency, or secret is configured.
 - No commercial sports provider, authentication, authorization, or API rate
   limiting is bundled.
 - Scheduling is external through Windows Task Scheduler.
@@ -715,7 +788,7 @@ network access. The automated command classifies these failures as
 
 ### Potential future work
 
-- A separate web or mobile frontend.
+- Production deployment and a mobile-specific client.
 - Authenticated multi-user API access.
 - Remote database/storage and cloud scheduling.
 - Production data-provider adapters with secure credential handling.
