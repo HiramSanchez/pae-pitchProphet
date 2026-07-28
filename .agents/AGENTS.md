@@ -61,13 +61,16 @@ Core SQLite entities are `tournaments`, `teams`, `matches`, and `elo_history`.
 uniqueness is tournament, round, home team, and away team. Team statistics are
 stored on `teams` and rebuilt from completed matches.
 
-Approved migrations add/upgrade `user_predictions`, `model_versions`,
-`predictions`, and `model_evaluations`. Versioned predictions store model,
-version, numeric configuration, probabilities, confidence, input snapshot,
-structured explanation, and creation time. Poisson and ensemble extended
-outputs live in `input_snapshot_json.model_output`; do not add columns for
-them. Never assume the local real database has already run every migration:
-inspect `PRAGMA table_info` before schema-sensitive changes.
+Approved migrations add/upgrade `user_predictions`,
+`user_prediction_rounds`, `model_versions`, `predictions`, and
+`model_evaluations`. `user_prediction_rounds` owns the manual
+`open -> finalized -> evaluated` journal lifecycle; dates and kickoffs do not
+control personal-pick writes. Versioned predictions store model, version,
+numeric configuration, probabilities, confidence, input snapshot, structured
+explanation, and creation time. Poisson and ensemble extended outputs live in
+`input_snapshot_json.model_output`; do not add columns for them. Never assume
+the local real database has already run every migration: inspect
+`PRAGMA table_info` before schema-sensitive changes.
 
 Any schema change requires an idempotent migration, in-memory migration tests,
 and a documented compatibility/recovery path. Never mutate `data/liga_mx.db`
@@ -110,6 +113,10 @@ during tests or exploratory checks; open it with SQLite `mode=ro`.
   bounded retries, emits structured UTC JSON logs, and relies on `update_runs`
   for per-attempt audit. Local scheduling uses Windows Task Scheduler; no
   resident daemon is part of the application.
+- The single-user journal currently uses configured predictor `Hiram`.
+  `UserPredictionRepository` owns journal persistence, keeps legacy
+  `user_predictions.is_final = 1`, and rejects writes unless the related
+  `user_prediction_rounds` row is `open`.
 - Prefer simple concrete implementations; do not add unused abstractions or
   speculative extension points.
 
